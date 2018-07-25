@@ -32,7 +32,7 @@ import (
 	"github.com/golang/glog"
 )
 
-// tcShaper provides an implementation of the BandwidthShaper interface on Linux using the 'tc' tool.
+// tcShaper provides an implementation of the Shaper interface on Linux using the 'tc' tool.
 // Uses the hierarchical token bucket queuing discipline (htb), this requires Linux 2.4.20 or newer
 // or a custom kernel with that queuing discipline backported.
 type tcShaper struct {

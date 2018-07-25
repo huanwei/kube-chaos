@@ -45,8 +45,8 @@ func main() {
 	flag.Parse()
 	// uses the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	fmt.Println(err)
 	if err != nil {
+		fmt.Println(err)
 		panic(err.Error())
 	}
 	// creates the clientset
@@ -96,14 +96,19 @@ func main() {
 			e := exec.New()
 			//data, err := e.Command("etcdctl", "--endpoint=http://10.96.232.136:6666", "get", "/calico/v1/host/"+pod.Status.HostIP+"/workload/k8s/"+pod.Namespace+"."+pod.Name+"/endpoint/eth0").CombinedOutput()
 
-			//curl -L 10.10.102.80:2379/v2/keys/calico/v1/host/10.10.102.80/workload/k8s/kube-system.nfs-controller-d6dw8/endpoint/eth0
+			//ETCDCTL_API=3 etcdctl get --endpoints=10.96.232.136:6666 --prefix /calico/resources/v3/projectcalico.org/
+
+			/*
+			[root@10 ~]# curl -L 10.10.103.40:2379/v2/keys/calico/v1/host/10.10.103.40-qas-slave/workload/k8s/kube-system.nfs-controller-vcw8x/endpoint/eth0/
+			{"action":"get","node":{"key":"/calico/v1/host/10.10.103.40-qas-slave/workload/k8s/kube-system.nfs-controller-vcw8x/endpoint/eth0","value":"{\"state\":\"active\",\"name\":\"cali7c18723fb77\",\"active_instance_id\":\"5ebe02a63f61153589b88958071a47032afcc7e5b28b5c325ca95423f93aee1d\",\"mac\":\"da:a5:d8:78:d1:47\",\"profile_ids\":[\"k8s_ns.kube-system\"],\"ipv4_nets\":[\"10.168.212.77/32\"],\"ipv6_nets\":[],\"labels\":{\"app\":\"nfs-controller\",\"calico/k8s_ns\":\"kube-system\",\"version\":\"v1\"}}","modifiedIndex":225,"createdIndex":225}}
+			*/
 			data, err := e.Command("curl", "-L", endpoint+"/v2/keys/calico/v1/host/"+pod.Status.HostIP+"/workload/k8s/"+pod.Namespace+"."+pod.Name+"/endpoint/eth0").CombinedOutput()
 			if err != nil {
 				glog.Errorf("Failed fetch pod %s interface name: %v", pod.Name, err)
 			}
 			//get the pod's calico vethname
 			re, _ := regexp.Compile("cali[a-f0-9]{11}")
-			vethName := string(re.Find(data)) //cali67801d38217
+			vethName := string(re.Find(data)) //cali7c18723fb77
 			glog.V(4).Infof("pod %s's vethname is %s", pod.Name, vethName)
 
 			//todo - fix
