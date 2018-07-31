@@ -208,16 +208,28 @@ func (t *tcShaper) ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo string)
 }
 
 func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo string) error {
+	e := exec.New()
+	e.Command("tc","qdisc","del","dev",t.iface,"root").CombinedOutput()
+
+	glog.Infof("Adding netem to interface: %s",t.iface)
+	// For test
+	data,err:=e.Command("tc","qdisc","add","dev",t.iface,"root","netem").CombinedOutput()
+	if(err!=nil){
+		glog.Errorf("TC exec error: %s\n%s",err,data)
+		return err
+	}else {
+		glog.Infof("Netem added")
+	}
 	return nil
 }
 
 
-func (t *tcShaper) Loss(percentage,successrate string) error {
-	//tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
+func (t *tcShaper) Loss(percentage,relate string) error {
+	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
 	e := exec.New()
-	glog.Infof("Adding loss %s,%s to if: %s",percentage,successrate,t.iface)
+	glog.Infof("Adding loss %s,%s to interface: %s",percentage,relate,t.iface)
 	// For test
-	data,err:=e.Command("tc","qdisc","add","dev",t.iface,"root","netem","loss",percentage,successrate).CombinedOutput()
+	data,err:=e.Command("tc","qdisc","change","dev",t.iface,"root","netem","loss",percentage,relate).CombinedOutput()
 	if(err!=nil){
 		glog.Errorf("TC exec error: %s\n%s",err,data)
 		return err
@@ -227,13 +239,13 @@ func (t *tcShaper) Loss(percentage,successrate string) error {
 	return nil
 }
 
-func (t *tcShaper) Delay(time string) error {
-	//tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
+func (t *tcShaper) Delay(time,deviation string) error{
+	// tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
 	//												 basis	devi  devirate
 	e := exec.New()
-	glog.Infof("Adding delay %s to if: %s",time,t.iface)
+	glog.Infof("Adding delay %s, %s to interface: %s",time,deviation,t.iface)
 	// For test
-	data,err:=e.Command("tc","qdisc","add","dev",t.iface,"root","netem","delay",time).CombinedOutput()
+	data,err:=e.Command("tc","qdisc","change","dev",t.iface,"root","netem","delay",time,deviation).CombinedOutput()
 	if(err!=nil){
 		glog.Errorf("TC exec error: %s\n%s",err,data)
 		return err
@@ -246,9 +258,9 @@ func (t *tcShaper) Delay(time string) error {
 func (t *tcShaper) Duplicate(percentage string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  duplicate 1%
 	e := exec.New()
-	glog.Infof("Adding duplicate %s to if: %s",percentage,t.iface)
+	glog.Infof("Adding duplicate %s to interface: %s",percentage,t.iface)
 	// For test
-	data,err:=e.Command("tc","qdisc","add","dev",t.iface,"root","netem","duplicate",percentage).CombinedOutput()
+	data,err:=e.Command("tc","qdisc","change","dev",t.iface,"root","netem","duplicate",percentage).CombinedOutput()
 	if(err!=nil){
 		glog.Errorf("TC exec error: %s ,\n%s",err,data)
 		return err
@@ -258,9 +270,50 @@ func (t *tcShaper) Duplicate(percentage string) error {
 	return nil
 }
 
-func (t *tcShaper) Reorder(percentage, relate string) error {
+func (t *tcShaper) Reorder(time,percentage, relate string) error {
+	// tc  qdisc  change  dev  eth0  root  netem  delay  10ms   reorder  25%  50%
+	e := exec.New()
+	glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s",time,percentage,relate,t.iface)
+	// For test
+	data,err:=e.Command("tc","qdisc","change","dev",t.iface,"root","netem","delay",time,"reorder",percentage,relate).CombinedOutput()
+	if(err!=nil){
+		glog.Errorf("TC exec error: %s ,\n%s",err,data)
+		return err
+	}else {
+		glog.Infof("Duplicate added")
+	}
 	return nil
 }
+
+func (t *tcShaper) Corrupt(percentage string) error {
+	// tc  qdisc  add  dev  eth0  root  netem  corrupt  0.2%
+	e := exec.New()
+	glog.Infof("Adding corrupt %s to interface: %s",percentage,t.iface)
+	// For test
+	data,err:=e.Command("tc","qdisc","change","dev",t.iface,"root","netem","corrupt",percentage).CombinedOutput()
+	if(err!=nil){
+		glog.Errorf("TC exec error: %s ,\n%s",err,data)
+		return err
+	}else {
+		glog.Infof("Corrupt added")
+	}
+	return nil
+}
+
+func (t *tcShaper) Clear(percentage, relate string) error {
+	e := exec.New()
+	glog.Infof("Deleting netem in interface: %s",t.iface)
+	// For test
+	data,err:=e.Command("tc","qdisc","del","dev",t.iface,"root","netem").CombinedOutput()
+	if(err!=nil){
+		glog.Errorf("TC exec error: %s\n%s",err,data)
+		return err
+	}else {
+		glog.Infof("Netem deleted")
+	}
+	return nil
+}
+
 
 // Remove a bandwidth limit for a particular CIDR on a particular network interface
 func reset(cidr, ifb string) error {

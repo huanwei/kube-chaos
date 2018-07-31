@@ -113,8 +113,8 @@ func main() {
 			}
 			glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
 
-			//shaper.Loss("50%","99%")
-			//shaper.Delay("100ms")
+			//shaper.Loss("50%","50%")
+			shaper.Delay("100ms","50ms")
 
 			//shaper.Duplicate("25%")
 

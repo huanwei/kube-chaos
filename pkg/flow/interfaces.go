@@ -22,11 +22,13 @@ type Shaper interface {
 	// Reconcile a CIDR managed by this shaper with the state on the ground
 	ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo string) error
 
-	Loss(percentage,successrate string) error
+	Loss(percentage,relate string) error
 
-	Delay(time string) error
+	Delay(time,deviation string) error
 
 	Duplicate(percentage string) error
 
-	Reorder(percentage, relate string) error
+	Reorder(time,percentage, relate string) error
+
+	Corrupt(percentage string) error
 }
