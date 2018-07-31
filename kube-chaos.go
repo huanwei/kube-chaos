@@ -20,15 +20,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/huanwei/kube-chaos/pkg/exec"
 	"github.com/huanwei/kube-chaos/pkg/flow"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"github.com/huanwei/kube-chaos/pkg/calico"
 )
 
 func main() {
@@ -40,7 +39,7 @@ func main() {
 	)
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
 	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
-	flag.StringVar(&labelSelector, "labelSelector", "", "select pods to do chaos, e.g. chaos=on")
+	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
 	flag.IntVar(&syncDuration, "syncDuration", 10, "sync duration(seconds)")
 	flag.Parse()
 	// uses the current context in kubeconfig
@@ -74,14 +73,13 @@ func main() {
 		for _, pod := range pods.Items {
 
 			// todo - fix
-
 			ingressChaosInfo, egressChaosInfo, err := flow.ExtractPodChaosInfo(pod.Annotations)
 			if err != nil {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
 			if ingressChaosInfo == "" && egressChaosInfo == "" {
 				glog.Warning("chaos is on, but the pod's chaos info was not set")
-				continue
+				//continue
 			}
 
 			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
@@ -93,7 +91,7 @@ func main() {
 			}
 
 			//fetch pod's vethname from calico's etcd
-			e := exec.New()
+			//e := exec.New()
 			//data, err := e.Command("etcdctl", "--endpoint=http://10.96.232.136:6666", "get", "/calico/v1/host/"+pod.Status.HostIP+"/workload/k8s/"+pod.Namespace+"."+pod.Name+"/endpoint/eth0").CombinedOutput()
 
 			//ETCDCTL_API=3 etcdctl get --endpoints=10.96.232.136:6666 --prefix /calico/resources/v3/projectcalico.org/
@@ -102,26 +100,45 @@ func main() {
 			[root@10 ~]# curl -L 10.10.103.40:2379/v2/keys/calico/v1/host/10.10.103.40-qas-slave/workload/k8s/kube-system.nfs-controller-vcw8x/endpoint/eth0/
 			{"action":"get","node":{"key":"/calico/v1/host/10.10.103.40-qas-slave/workload/k8s/kube-system.nfs-controller-vcw8x/endpoint/eth0","value":"{\"state\":\"active\",\"name\":\"cali7c18723fb77\",\"active_instance_id\":\"5ebe02a63f61153589b88958071a47032afcc7e5b28b5c325ca95423f93aee1d\",\"mac\":\"da:a5:d8:78:d1:47\",\"profile_ids\":[\"k8s_ns.kube-system\"],\"ipv4_nets\":[\"10.168.212.77/32\"],\"ipv6_nets\":[],\"labels\":{\"app\":\"nfs-controller\",\"calico/k8s_ns\":\"kube-system\",\"version\":\"v1\"}}","modifiedIndex":225,"createdIndex":225}}
 			*/
-			data, err := e.Command("curl", "-L", endpoint+"/v2/keys/calico/v1/host/"+pod.Status.HostIP+"/workload/k8s/"+pod.Namespace+"."+pod.Name+"/endpoint/eth0").CombinedOutput()
-			if err != nil {
-				glog.Errorf("Failed fetch pod %s interface name: %v", pod.Name, err)
-			}
-			//get the pod's calico vethname
-			re, _ := regexp.Compile("cali[a-f0-9]{11}")
-			vethName := string(re.Find(data)) //cali7c18723fb77
-			glog.V(4).Infof("pod %s's vethname is %s", pod.Name, vethName)
+			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name)
 
-			//todo - fix
-			shaper := flow.NewTCShaper(vethName)
+			shaper := flow.NewTCShaper(workload.Spec.InterfaceName)
 			//config pod interface  qdisc, and mirror to ifb
 			if err := shaper.ReconcileInterface(egressChaosInfo, ingressChaosInfo); err != nil {
-				glog.Errorf("Failed to init veth(%s): %v", vethName, err)
+				glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
 			}
 
 			if err := shaper.ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo); err != nil {
 				glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
 			}
 			glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
+
+			//shaper.Loss("50%","99%")
+			//shaper.Delay("100ms")
+
+			//shaper.Duplicate("25%")
+
+
+			//data, err := e.Command("curl", "-L", endpoint+"/v2/keys/calico/v1/host/"+pod.Status.HostIP+"/workload/k8s/"+pod.Namespace+"."+pod.Name+"/endpoint/eth0").CombinedOutput()
+			//if err != nil {
+			//	glog.Errorf("Failed fetch pod %s interface name: %v", pod.Name, err)
+			//}
+			////get the pod's calico vethname
+			//re, _ := regexp.Compile("cali[a-f0-9]{11}")
+			//vethName := string(re.Find(data)) //cali7c18723fb77
+			//glog.V(4).Infof("pod %s's vethname is %s", pod.Name, vethName)
+
+			////todo - fix
+			//shaper := flow.NewTCShaper(vethName)
+			////config pod interface  qdisc, and mirror to ifb
+			//if err := shaper.ReconcileInterface(egressChaosInfo, ingressChaosInfo); err != nil {
+			//	glog.Errorf("Failed to init veth(%s): %v", vethName, err)
+			//}
+			//
+			//if err := shaper.ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo); err != nil {
+			//	glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
+			//}
+			//glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
 
 		}
 		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {

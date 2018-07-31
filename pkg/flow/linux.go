@@ -1,4 +1,4 @@
-// +build linux
+//// +build linux
 
 /*
 Copyright 2015 The Kubernetes Authors.
@@ -212,15 +212,49 @@ func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo string) 
 }
 
 
-func (t *tcShaper) Loss(percentage string) error {
+func (t *tcShaper) Loss(percentage,successrate string) error {
+	//tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
+	e := exec.New()
+	glog.Infof("Adding loss %s,%s to if: %s",percentage,successrate,t.iface)
+	// For test
+	data,err:=e.Command("tc","qdisc","add","dev",t.iface,"root","netem","loss",percentage,successrate).CombinedOutput()
+	if(err!=nil){
+		glog.Errorf("TC exec error: %s\n%s",err,data)
+		return err
+	}else {
+		glog.Infof("Loss added")
+	}
 	return nil
 }
 
 func (t *tcShaper) Delay(time string) error {
+	//tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
+	//												 basis	devi  devirate
+	e := exec.New()
+	glog.Infof("Adding delay %s to if: %s",time,t.iface)
+	// For test
+	data,err:=e.Command("tc","qdisc","add","dev",t.iface,"root","netem","delay",time).CombinedOutput()
+	if(err!=nil){
+		glog.Errorf("TC exec error: %s\n%s",err,data)
+		return err
+	}else {
+		glog.Infof("Delay added")
+	}
 	return nil
 }
 
 func (t *tcShaper) Duplicate(percentage string) error {
+	// tc  qdisc  add  dev  eth0  root  netem  duplicate 1%
+	e := exec.New()
+	glog.Infof("Adding duplicate %s to if: %s",percentage,t.iface)
+	// For test
+	data,err:=e.Command("tc","qdisc","add","dev",t.iface,"root","netem","duplicate",percentage).CombinedOutput()
+	if(err!=nil){
+		glog.Errorf("TC exec error: %s ,\n%s",err,data)
+		return err
+	}else {
+		glog.Infof("Duplicate added")
+	}
 	return nil
 }
 
