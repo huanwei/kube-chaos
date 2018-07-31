@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: chaos
+  namespace: kube-system
+  labels: 
+    name: "chaos"
+    chaos: "on"
+spec:
+  selector:
+    matchLabels:
+      name: "chaos"
+      chaos: "on"
+  template:
+    metadata:
+      labels:
+        name: "chaos"
+        chaos: "on"
+    spec:
+      nodeSelector:
+        chaos: "on"
+      containers:
+      - name: chaos
+        securityContext:
+          privileged: true
+        image: kube-chaos:v0.2
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: etckubernetes
+          mountPath: /etc/kubernetes
+        - name: varlibkubelet
+          mountPath: /var/lib/kubelet
+        - name: libmodules
+          mountPath: /lib/modules
+       # command:
+       # - kube-chaos
+       # - --etcd-endpoint=http://10.96.232.136:6666
+       # - --labelSelector=chaos=open
+       # - --v=4
+      volumes:
+      - name: etckubernetes
+        hostPath:
+          path: /etc/kubernetes
+      - name: varlibkubelet
+        hostPath:
+          path: /var/lib/kubelet
+      - name: libmodules
+        hostPath:
+          path: /lib/modules
+      hostNetwork: true

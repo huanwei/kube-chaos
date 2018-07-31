@@ -43,6 +43,13 @@ func InitIfbModule() error {
 	return nil
 }
 
+/*
+[root@localhost ~]# tc qdisc show dev ifb0
+qdisc pfifo_fast 0: root refcnt 2 bands 3 priomap  1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1
+[root@localhost ~]# tc qdisc add dev ifb0 root handle 1: htb default 30
+[root@localhost ~]# tc qdisc show dev ifb0
+qdisc htb 1: root refcnt 2 r2q 10 default 30 direct_packets_stat 0
+*/
 func initIfb(ifb string) error {
 	e := exec.New()
 	data, err := e.Command("tc", "qdisc", "show", "dev", ifb).CombinedOutput()
