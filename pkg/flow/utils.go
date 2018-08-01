@@ -16,30 +16,30 @@ limitations under the License.
 
 package flow
 
-import	(
+import (
 	"encoding/json"
 )
 
 type TCChaosInfo struct {
-	Updated	string
-	Delay	struct{
-		Set 	string
-		Time 	string
-		Deviation 	string
+	Delay struct {
+		Set       string
+		Time      string
+		Deviation string
 	}
-	Loss	struct{
-		Set 	string
-		Percentage 	string
-		Relate 	string
+	Loss struct {
+		Set        string
+		Percentage string
+		Relate     string
 	}
 	Duplicate struct {
-		Set 	string
-		percentage string
+		Set        string
+		Percentage string
 	}
-	Reorder struct{
-		Set 	string
-		Time 	string
+	Reorder struct {
+		Set         string
+		Time        string
 		Percengtage string
+		Relate      string
 	}
 	Corrupt struct {
 		Set        string
@@ -47,23 +47,22 @@ type TCChaosInfo struct {
 	}
 }
 
-func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string){
-	newAnnotations=podAnnotations
-	newAnnotations["chaos-done"]="yes"
+func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
+	newAnnotations = podAnnotations
+	newAnnotations["chaos-done"] = "yes"
 	return newAnnotations
 }
 
-func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, tcChaosInfo TCChaosInfo, needUpdate bool,err error) {
-	done,found:=podAnnotations["chaos-done"]
-	if found&&done=="yes"{
-		return "","",tcChaosInfo,true,nil
+func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, tcChaosInfo TCChaosInfo, needUpdate bool, err error) {
+	done, found := podAnnotations["chaos-done"]
+	if found && done == "yes" {
+		return "", "", tcChaosInfo, false, nil
 	}
 
-	info,found:=podAnnotations["TC-chaos"]
-	if found{
-		json.Unmarshal([]byte(info),&tcChaosInfo)
+	info, found := podAnnotations["TC-chaos"]
+	if found {
+		json.Unmarshal([]byte(info), &tcChaosInfo)
 	}
-
 
 	ingressChaosInfo, found = podAnnotations["kubernetes.io/ingress-chaos"]
 	if found {
@@ -73,5 +72,5 @@ func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, eg
 	if found {
 	}
 
-	return ingressChaosInfo, egressChaosInfo, tcChaosInfo,false,nil
+	return ingressChaosInfo, egressChaosInfo, tcChaosInfo, true, nil
 }

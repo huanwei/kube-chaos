@@ -31,4 +31,6 @@ type Shaper interface {
 	Reorder(time,percentage, relate string) error
 
 	Corrupt(percentage string) error
+
+	ExecTcChaos(info TCChaosInfo) error
 }
