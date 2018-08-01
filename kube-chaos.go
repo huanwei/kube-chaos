@@ -73,13 +73,12 @@ func main() {
 		for _, pod := range pods.Items {
 
 			// todo - fix
-			ingressChaosInfo, egressChaosInfo, err := flow.ExtractPodChaosInfo(pod.Annotations)
+			ingressChaosInfo, egressChaosInfo,_,needUpdate, err := flow.ExtractPodChaosInfo(pod.Annotations)
 			if err != nil {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
-			if ingressChaosInfo == "" && egressChaosInfo == "" {
-				glog.Warning("chaos is on, but the pod's chaos info was not set")
-				//continue
+			if !needUpdate {
+				continue
 			}
 
 			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
@@ -100,6 +99,13 @@ func main() {
 			[root@10 ~]# curl -L 10.10.103.40:2379/v2/keys/calico/v1/host/10.10.103.40-qas-slave/workload/k8s/kube-system.nfs-controller-vcw8x/endpoint/eth0/
 			{"action":"get","node":{"key":"/calico/v1/host/10.10.103.40-qas-slave/workload/k8s/kube-system.nfs-controller-vcw8x/endpoint/eth0","value":"{\"state\":\"active\",\"name\":\"cali7c18723fb77\",\"active_instance_id\":\"5ebe02a63f61153589b88958071a47032afcc7e5b28b5c325ca95423f93aee1d\",\"mac\":\"da:a5:d8:78:d1:47\",\"profile_ids\":[\"k8s_ns.kube-system\"],\"ipv4_nets\":[\"10.168.212.77/32\"],\"ipv6_nets\":[],\"labels\":{\"app\":\"nfs-controller\",\"calico/k8s_ns\":\"kube-system\",\"version\":\"v1\"}}","modifiedIndex":225,"createdIndex":225}}
 			*/
+			done,ok :=pod.Annotations["chaos-done"]
+
+			if ok&&done=="yes"{
+				glog.Infof("pod %s's setting has deployed, skip",pod.Name)
+				continue
+			}
+
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name)
 
 			shaper := flow.NewTCShaper(workload.Spec.InterfaceName)
@@ -114,7 +120,11 @@ func main() {
 			glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
 
 			//shaper.Loss("50%","50%")
-			shaper.Delay("100ms","50ms")
+			shaper.Delay("200ms","10ms")
+
+			//Update chaos-done flag
+			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
+			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 			//shaper.Duplicate("25%")
 
