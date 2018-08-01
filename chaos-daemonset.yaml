@@ -10,12 +10,10 @@ spec:
   selector:
     matchLabels:
       name: "chaos"
-      chaos: "on"
   template:
     metadata:
       labels:
         name: "chaos"
-        chaos: "on"
     spec:
       nodeSelector:
         chaos: "on"
@@ -32,6 +30,8 @@ spec:
           mountPath: /var/lib/kubelet
         - name: libmodules
           mountPath: /lib/modules
+        - name: host-time
+          mountPath: /etc/localtime
        # command:
        # - kube-chaos
        # - --etcd-endpoint=http://10.96.232.136:6666
@@ -47,4 +47,8 @@ spec:
       - name: libmodules
         hostPath:
           path: /lib/modules
+      - name: host-time
+        hostPath:
+          path: /etc/localtime
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
