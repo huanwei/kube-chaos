@@ -29,8 +29,8 @@ import (
 	"github.com/huanwei/kube-chaos/pkg/exec"
 	"github.com/huanwei/kube-chaos/pkg/sets"
 
-	"github.com/golang/glog"
 	"errors"
+	"github.com/golang/glog"
 )
 
 // tcShaper provides an implementation of the Shaper interface on Linux using the 'tc' tool.
@@ -215,7 +215,7 @@ func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo string) 
 	glog.Infof("Adding netem to interface: %s", t.iface)
 	// For test
 	data, err := e.Command("tc", "qdisc", "add", "dev", t.iface, "root", "netem").CombinedOutput()
-	if (err != nil) {
+	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
 	} else {
@@ -230,7 +230,7 @@ func (t *tcShaper) Loss(percentage, relate string) error {
 	glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, t.iface)
 	// For test
 	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "loss", percentage, relate).CombinedOutput()
-	if (err != nil) {
+	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
 	} else {
@@ -246,7 +246,7 @@ func (t *tcShaper) Delay(time, deviation string) error {
 	glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, t.iface)
 	// For test
 	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "delay", time, deviation).CombinedOutput()
-	if (err != nil) {
+	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
 	} else {
@@ -261,7 +261,7 @@ func (t *tcShaper) Duplicate(percentage string) error {
 	glog.Infof("Adding duplicate %s to interface: %s", percentage, t.iface)
 	// For test
 	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "duplicate", percentage).CombinedOutput()
-	if (err != nil) {
+	if err != nil {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
 	} else {
@@ -276,7 +276,7 @@ func (t *tcShaper) Reorder(time, percentage, relate string) error {
 	glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, t.iface)
 	// For test
 	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
-	if (err != nil) {
+	if err != nil {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
 	} else {
@@ -291,7 +291,7 @@ func (t *tcShaper) Corrupt(percentage string) error {
 	glog.Infof("Adding corrupt %s to interface: %s", percentage, t.iface)
 	// For test
 	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "corrupt", percentage).CombinedOutput()
-	if (err != nil) {
+	if err != nil {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
 	} else {
@@ -305,7 +305,7 @@ func (t *tcShaper) Clear(percentage, relate string) error {
 	glog.Infof("Deleting netem in interface: %s", t.iface)
 	// For test
 	data, err := e.Command("tc", "qdisc", "del", "dev", t.iface, "root", "netem").CombinedOutput()
-	if (err != nil) {
+	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
 	} else {
@@ -314,20 +314,20 @@ func (t *tcShaper) Clear(percentage, relate string) error {
 	return nil
 }
 
-func (t *tcShaper)ExecTcChaos(info TCChaosInfo) error {
-	if info.Delay.Set=="yes"{
-		return t.Delay(info.Delay.Time,info.Delay.Deviation)
+func (t *tcShaper) ExecTcChaos(info TCChaosInfo) error {
+	if info.Delay.Set == "yes" {
+		return t.Delay(info.Delay.Time, info.Delay.Deviation)
 	}
-	if info.Loss.Set=="yes"{
-		return t.Loss(info.Loss.Percentage,info.Loss.Relate)
+	if info.Loss.Set == "yes" {
+		return t.Loss(info.Loss.Percentage, info.Loss.Relate)
 	}
-	if info.Duplicate.Set=="yes"{
+	if info.Duplicate.Set == "yes" {
 		return t.Duplicate(info.Duplicate.Percentage)
 	}
-	if info.Reorder.Set=="yes"{
-		return t.Reorder(info.Reorder.Time,info.Reorder.Percengtage,info.Reorder.Relate)
+	if info.Reorder.Set == "yes" {
+		return t.Reorder(info.Reorder.Time, info.Reorder.Percengtage, info.Reorder.Relate)
 	}
-	if info.Corrupt.Set=="yes"{
+	if info.Corrupt.Set == "yes" {
 		return t.Corrupt(info.Corrupt.Percentage)
 	}
 	return errors.New("No tc Chaos Info set")
