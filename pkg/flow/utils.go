@@ -16,17 +16,61 @@ limitations under the License.
 
 package flow
 
-func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, err error) {
+import (
+	"encoding/json"
+)
 
-	ingressChaosInfo, found := podAnnotations["kubernetes.io/ingress-chaos"]
-	if !found {
-		return "", "", err
+type TCChaosInfo struct {
+	Delay struct {
+		Set       string
+		Time      string
+		Deviation string
+	}
+	Loss struct {
+		Set        string
+		Percentage string
+		Relate     string
+	}
+	Duplicate struct {
+		Set        string
+		Percentage string
+	}
+	Reorder struct {
+		Set         string
+		Time        string
+		Percengtage string
+		Relate      string
+	}
+	Corrupt struct {
+		Set        string
+		Percentage string
+	}
+}
 
+func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
+	newAnnotations = podAnnotations
+	newAnnotations["chaos-done"] = "yes"
+	return newAnnotations
+}
+
+func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, tcChaosInfo TCChaosInfo, needUpdate bool, err error) {
+	done, found := podAnnotations["chaos-done"]
+	if found && done == "yes" {
+		return "", "", tcChaosInfo, false, nil
+	}
+
+	info, found := podAnnotations["TC-chaos"]
+	if found {
+		json.Unmarshal([]byte(info), &tcChaosInfo)
+	}
+
+	ingressChaosInfo, found = podAnnotations["kubernetes.io/ingress-chaos"]
+	if found {
 	}
 
 	egressChaosInfo, found = podAnnotations["kubernetes.io/egress-chaos"]
-	if !found {
-		return "", "", err
+	if found {
 	}
-	return ingressChaosInfo, egressChaosInfo, nil
+
+	return ingressChaosInfo, egressChaosInfo, tcChaosInfo, true, nil
 }
