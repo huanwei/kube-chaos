@@ -109,6 +109,7 @@ func main() {
 			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
+			//test dingtalk
 			//data, err := e.Command("curl", "-L", endpoint+"/v2/keys/calico/v1/host/"+pod.Status.HostIP+"/workload/k8s/"+pod.Namespace+"."+pod.Name+"/endpoint/eth0").CombinedOutput()
 			//if err != nil {
 			//	glog.Errorf("Failed fetch pod %s interface name: %v", pod.Name, err)
