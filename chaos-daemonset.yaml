@@ -32,6 +32,8 @@ spec:
           mountPath: /lib/modules
         - name: host-time
           mountPath: /etc/localtime
+        - name: log
+          mountPath: /tmp
        # command:
        # - kube-chaos
        # - --etcd-endpoint=http://10.96.232.136:6666
@@ -50,5 +52,8 @@ spec:
       - name: host-time
         hostPath:
           path: /etc/localtime
+      - name: log
+        hostPath:
+          path: /tmp
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet

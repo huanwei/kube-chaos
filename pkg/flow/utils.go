@@ -20,11 +20,12 @@ import (
 	"encoding/json"
 )
 
+// Represent tc chaos information using json encoding
 type TCChaosInfo struct {
 	Delay struct {
 		Set       string
 		Time      string
-		Deviation string
+		Variation string
 	}
 	Loss struct {
 		Set        string
@@ -47,15 +48,17 @@ type TCChaosInfo struct {
 	}
 }
 
+// Change chaos-done flag to yes
 func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
 	newAnnotations = podAnnotations
 	newAnnotations["chaos-done"] = "yes"
 	return newAnnotations
 }
 
+// Extract Chaos settings from pod's annotation
 func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, tcChaosInfo TCChaosInfo, needUpdate bool, err error) {
 	done, found := podAnnotations["chaos-done"]
-	if found && done == "yes" {
+	if (found && done == "yes")||!found {
 		return "", "", tcChaosInfo, false, nil
 	}
 
