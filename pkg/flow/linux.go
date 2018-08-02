@@ -316,7 +316,7 @@ func (t *tcShaper) Clear(percentage, relate string) error {
 
 func (t *tcShaper) ExecTcChaos(info TCChaosInfo) error {
 	if info.Delay.Set == "yes" {
-		return t.Delay(info.Delay.Time, info.Delay.Deviation)
+		return t.Delay(info.Delay.Time, info.Delay.Variation)
 	}
 	if info.Loss.Set == "yes" {
 		return t.Loss(info.Loss.Percentage, info.Loss.Relate)

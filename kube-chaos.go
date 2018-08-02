@@ -109,27 +109,6 @@ func main() {
 			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
-			//test dingtalk
-			//data, err := e.Command("curl", "-L", endpoint+"/v2/keys/calico/v1/host/"+pod.Status.HostIP+"/workload/k8s/"+pod.Namespace+"."+pod.Name+"/endpoint/eth0").CombinedOutput()
-			//if err != nil {
-			//	glog.Errorf("Failed fetch pod %s interface name: %v", pod.Name, err)
-			//}
-			////get the pod's calico vethname
-			//re, _ := regexp.Compile("cali[a-f0-9]{11}")
-			//vethName := string(re.Find(data)) //cali7c18723fb77
-			//glog.V(4).Infof("pod %s's vethname is %s", pod.Name, vethName)
-
-			////todo - fix
-			//shaper := flow.NewTCShaper(vethName)
-			////config pod interface  qdisc, and mirror to ifb
-			//if err := shaper.ReconcileInterface(egressChaosInfo, ingressChaosInfo); err != nil {
-			//	glog.Errorf("Failed to init veth(%s): %v", vethName, err)
-			//}
-			//
-			//if err := shaper.ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo); err != nil {
-			//	glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
-			//}
-			//glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
 
 		}
 		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
