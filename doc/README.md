@@ -25,7 +25,7 @@ kube-chaos是一个kubernets平台的故障注入组件，使用iproute2实现�
 ### 用户使用流程
 ![](img/userProcess.png)
 ### chaos执行流程
-
+![](img/execProcess.png)
 
 ## 部署方式
 ### 项目编译
