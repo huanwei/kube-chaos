@@ -43,33 +43,33 @@ func main() {
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
 	flag.IntVar(&syncDuration, "syncDuration", 10, "sync duration(seconds)")
 	flag.Parse()
-	// uses the current context in kubeconfig
+	// Uses the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		fmt.Println(err)
 		panic(err.Error())
 	}
-	// creates the clientset
+	// Creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
-	// init ifb module
+	// Init ifb module
 	err = flow.InitIfbModule()
 	if err != nil {
 		glog.Errorf("Failed init ifb: %v", err)
 	}
-	//Synchronize pods and do chaos
+	// Synchronize pods and do chaos
 	for {
+		// Only control current node's pods, so select pods using node name
 		hostname,_:=os.Hostname()
-		//pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{FieldSelector: "spec.nodeName=10.10.103.182", LabelSelector: labelSelector})
 		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
 		if err != nil {
 			glog.Errorf("Failed list pods: %v", err)
 		}
 		glog.V(4).Infof("There are %d pods need to do chaos in the cluster\n", len(pods.Items))
 
-		//used for  checking which tc class isn't used, and del it
+		// Used for  checking which tc class isn't used, and del it
 		egressPodsCIDRs := []string{}
 		ingressPodsCIDRs := []string{}
 
@@ -93,10 +93,11 @@ func main() {
 				ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
 			}
 
+			// Get pod's veth interface name
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name,flow.GetMasterIP(clientset))
 
 			shaper := flow.NewTCShaper(workload.Spec.InterfaceName)
-			//config pod interface  qdisc, and mirror to ifb
+			// Config pod interface  qdisc, and mirror to ifb
 			if err := shaper.ReconcileInterface(egressChaosInfo, ingressChaosInfo); err != nil {
 				glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
 			}
@@ -106,9 +107,10 @@ func main() {
 			}
 			glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
 
+			// Execute tc command in egress
 			shaper.ExecTcChaos(tcChaosInfo)
 
-			//Update chaos-done flag
+			// Update chaos-done flag
 			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
@@ -117,6 +119,7 @@ func main() {
 		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}
+		// Sleep to avoid high CPU usage
 		time.Sleep(time.Duration(syncDuration) * time.Second)
 	}
 

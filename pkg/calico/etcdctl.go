@@ -22,7 +22,10 @@ func GetWorkload(namespace, nodeName, podName,masterIP string) Workload {
 	podNames := strings.Split(podName, "-")
 	newPodName := strings.Join(podNames, "--")
 
-	cmd := namespace + "/" + nodeName + "-k8s-" + newPodName + "-eth0"
+	nodeNames := strings.Split(nodeName, "-")
+	newNodeName := strings.Join(nodeNames, "--")
+
+	cmd := namespace + "/" + newNodeName + "-k8s-" + newPodName + "-eth0"
 
 	data, err := e.Command("etcdctl", "get", "--endpoints="+masterIP+":6666", "--prefix", "/calico/resources/v3/projectcalico.org/workloadendpoints/"+cmd).CombinedOutput()
 
