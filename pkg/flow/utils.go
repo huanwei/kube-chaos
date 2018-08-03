@@ -18,6 +18,8 @@ package flow
 
 import (
 	"encoding/json"
+	"k8s.io/client-go/kubernetes"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Represent tc chaos information using json encoding
@@ -76,4 +78,16 @@ func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, eg
 	}
 
 	return ingressChaosInfo, egressChaosInfo, tcChaosInfo, true, nil
+}
+
+func GetMasterIP(clientset *kubernetes.Clientset) (masterIP string){
+	nodes,_:=clientset.CoreV1().Nodes().List(meta_v1.ListOptions{LabelSelector:"node-role.kubernetes.io/master="})
+	masterAddrs:=nodes.Items[0].Status.Addresses
+
+	for _, addr:=range masterAddrs{
+		if addr.Type=="InternalIP"{
+			masterIP=addr.Address
+		}
+	}
+	return masterIP
 }

@@ -1,6 +1,8 @@
 # README
 kube-chaos是一个kubernets平台的故障注入组件，使用iproute2实现恶劣网络环境的模拟
 
+注意：运行kube-chaos时，hostname必须与k8s上显示的node名一致，这一般是默认的，但一旦用户主动更改，则会导致kube-chaos运行出错，原因在于k8s没有pod定位自身所在pod的API，因此只能通过hostname来确定所处的Node
+
 ## 文档目录
 
 * **运行方式与原理**

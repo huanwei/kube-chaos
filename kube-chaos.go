@@ -28,6 +28,7 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"os"
 )
 
 func main() {
@@ -60,8 +61,9 @@ func main() {
 	}
 	//Synchronize pods and do chaos
 	for {
+		hostname,_:=os.Hostname()
 		//pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{FieldSelector: "spec.nodeName=10.10.103.182", LabelSelector: labelSelector})
-		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector})
+		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
 		if err != nil {
 			glog.Errorf("Failed list pods: %v", err)
 		}
@@ -70,6 +72,7 @@ func main() {
 		//used for  checking which tc class isn't used, and del it
 		egressPodsCIDRs := []string{}
 		ingressPodsCIDRs := []string{}
+
 		for _, pod := range pods.Items {
 
 			// todo - fix
@@ -90,7 +93,7 @@ func main() {
 				ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
 			}
 
-			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name)
+			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name,flow.GetMasterIP(clientset))
 
 			shaper := flow.NewTCShaper(workload.Spec.InterfaceName)
 			//config pod interface  qdisc, and mirror to ifb

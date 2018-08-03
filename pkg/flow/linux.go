@@ -280,7 +280,7 @@ func (t *tcShaper) Reorder(time, percentage, relate string) error {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
 	} else {
-		glog.Infof("Duplicate added")
+		glog.Infof("Reorder added")
 	}
 	return nil
 }
