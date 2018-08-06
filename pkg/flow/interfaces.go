@@ -32,5 +32,7 @@ type Shaper interface {
 
 	Corrupt(percentage string) error
 
+	Rate(rate string) error
+
 	ExecTcChaos(info ChaosInfo) error
 }
