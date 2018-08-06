@@ -33,6 +33,11 @@ type Shaper interface {
 	//Reorder(time, percentage, relate string) error
 	//
 	//Corrupt(percentage string) error
+	//Rate(rate string) error
 
 	ExecTcChaos(isIngress bool, info ChaosInfo) error
+
+
+
+
 }
