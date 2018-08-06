@@ -37,7 +37,9 @@ func main() {
 		endpoint      string
 		labelSelector string
 		syncDuration  int
+		shaper flow.Shaper
 	)
+	shaperMap := map[string]flow.Shaper{}
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
 	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
@@ -93,7 +95,17 @@ func main() {
 			// Get pod's veth interface name
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name,flow.GetMasterIP(clientset))
 
-			shaper := flow.NewTCShaper(workload.Spec.InterfaceName)
+			// Get shaper from the map
+			if shaperMap[workload.Spec.InterfaceName] == nil {
+				shaper = flow.NewTCShaper(workload.Spec.InterfaceName)
+				shaperMap[workload.Spec.InterfaceName] = shaper
+				if err := shaper.ReconcileMirroring("ifb0", cidr, egressChaosInfo, ingressChaosInfo); err != nil {
+					glog.Errorf("Failed to mirror veth(%s): %v", workload.Spec.InterfaceName, err)
+				}
+			} else {
+				shaper = shaperMap[workload.Spec.InterfaceName]
+			}
+
 			// Config pod interface  qdisc, and mirror to ifb
 			if err := shaper.ReconcileInterface(egressChaosInfo, ingressChaosInfo); err != nil {
 				glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
@@ -105,7 +117,10 @@ func main() {
 			glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
 
 			// Execute tc command in ingress
-			shaper.ExecTcChaos(ingressChaosInfo)
+			shaper.ExecTcChaos(true, ingressChaosInfo)
+
+			// Execute tc command in egress
+			shaper.ExecTcChaos(false, egressChaosInfo)
 
 			// Update chaos-done flag
 			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
