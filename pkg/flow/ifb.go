@@ -17,10 +17,7 @@ limitations under the License.
 package flow
 
 import (
-	"bufio"
-	"bytes"
 	"github.com/huanwei/kube-chaos/pkg/exec"
-	"strings"
 )
 
 func InitIfbModule() error {
@@ -52,22 +49,23 @@ qdisc htb 1: root refcnt 2 r2q 10 default 30 direct_packets_stat 0
 */
 func initIfb(ifb string) error {
 	e := exec.New()
-	data, err := e.Command("tc", "qdisc", "show", "dev", ifb).CombinedOutput()
-	if err != nil {
-		return err
-	}
-	scanner := bufio.NewScanner(bytes.NewBuffer(data))
-	spec := "htb 1:"
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if len(line) == 0 {
-			continue
-		}
-		if strings.Contains(line, spec) {
-			return nil
-		}
-	}
-	if _, err := e.Command("tc", "qdisc", "add", "dev", ifb, "root", "handle", "1:", "htb", "default", "30").CombinedOutput(); err != nil {
+	//data, err := e.Command("tc", "qdisc", "show", "dev", ifb).CombinedOutput()
+	//if err != nil {
+	//	return err
+	//}
+	//scanner := bufio.NewScanner(bytes.NewBuffer(data))
+	//spec := "htb 1:"
+	//for scanner.Scan() {
+	//	line := strings.TrimSpace(scanner.Text())
+	//	if len(line) == 0 {
+	//		continue
+	//	}
+	//	if strings.Contains(line, spec) {
+	//		return nil
+	//	}
+	//}
+	e.Command("tc","qdisc","del","dev",ifb,"root").CombinedOutput()
+	if _, err := e.Command("tc", "qdisc", "add", "dev", ifb, "root", "handle", "1:", "htb", "default", "0").CombinedOutput(); err != nil {
 		return err
 	}
 	return nil
