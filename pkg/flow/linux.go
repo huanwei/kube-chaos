@@ -335,19 +335,20 @@ func (t *tcShaper) Corrupt(percentage string) error {
 
 func (t *tcShaper) Clear(percentage, relate string) error {
 	e := exec.New()
-	glog.Infof("Deleting htb in interface: %s", t.iface)
+	glog.Infof("Deleting HTB in interface: %s", t.iface)
 	// For test
-	data, err := e.Command("tc", "qdisc", "del", "dev", t.iface, "root", "netem").CombinedOutput()
+	data, err := e.Command("tc", "qdisc", "del", "dev", t.iface, "root").CombinedOutput()
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
 	} else {
-		glog.Infof("Netem deleted")
+		glog.Infof("HTB deleted")
 	}
 	return nil
 }
 
 func (t *tcShaper) ExecTcChaos(info ChaosInfo) error {
+	t.Rate(info.Rate)
 	if info.Delay.Set == "yes" {
 		return t.Delay(info.Delay.Time, info.Delay.Variation)
 	}
@@ -363,7 +364,7 @@ func (t *tcShaper) ExecTcChaos(info ChaosInfo) error {
 	if info.Corrupt.Set == "yes" {
 		return t.Corrupt(info.Corrupt.Percentage)
 	}
-	return errors.New("No tc Chaos Info set")
+	return errors.New("No Chaos Info set")
 }
 
 // Remove a bandwidth limit for a particular CIDR on a particular network interface

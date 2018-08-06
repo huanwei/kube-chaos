@@ -24,6 +24,7 @@ import (
 
 // Represent tc chaos information using json encoding
 type ChaosInfo struct {
+	Rate 	string
 	Delay struct {
 		Set       string
 		Time      string
