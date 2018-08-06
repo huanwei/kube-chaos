@@ -203,12 +203,12 @@ func (t *tcShaper) qdiscExists(vethName string) (bool, bool, error) {
 	return rootQdisc, ingressQdisc, nil
 }
 
-func (t *tcShaper) ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo string) error {
+func (t *tcShaper) ReconcileCIDR(cidr string, egressChaosInfo, ingressChaosInfo ChaosInfo) error {
 	glog.V(4).Infof("Shaper CIDR %s with egressChaosInfo %s, ingressChaosInfo %s", cidr, egressChaosInfo, ingressChaosInfo)
 	return nil
 }
 
-func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo string) error {
+func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo ChaosInfo) error {
 	e := exec.New()
 	e.Command("tc", "qdisc", "del", "dev", t.iface, "root").CombinedOutput()
 
@@ -314,7 +314,7 @@ func (t *tcShaper) Clear(percentage, relate string) error {
 	return nil
 }
 
-func (t *tcShaper) ExecTcChaos(info TCChaosInfo) error {
+func (t *tcShaper) ExecTcChaos(info ChaosInfo) error {
 	if info.Delay.Set == "yes" {
 		return t.Delay(info.Delay.Time, info.Delay.Variation)
 	}

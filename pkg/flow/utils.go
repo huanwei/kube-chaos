@@ -23,7 +23,7 @@ import (
 )
 
 // Represent tc chaos information using json encoding
-type TCChaosInfo struct {
+type ChaosInfo struct {
 	Delay struct {
 		Set       string
 		Time      string
@@ -58,26 +58,23 @@ func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[st
 }
 
 // Extract Chaos settings from pod's annotation
-func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, tcChaosInfo TCChaosInfo, needUpdate bool, err error) {
-	done, found := podAnnotations["chaos-done"]
+func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo ChaosInfo, needUpdate bool, err error) {
+	done, found := podAnnotations["kubernetes.io/done-chaos"]
 	if (found && done == "yes")||!found {
-		return "", "", tcChaosInfo, false, nil
+		return ingressChaosInfo, egressChaosInfo, false, nil
 	}
 
-	info, found := podAnnotations["TC-chaos"]
+	ingress, found := podAnnotations["kubernetes.io/ingress-chaos"]
 	if found {
-		json.Unmarshal([]byte(info), &tcChaosInfo)
+		json.Unmarshal([]byte(ingress), &ingressChaosInfo)
 	}
 
-	ingressChaosInfo, found = podAnnotations["kubernetes.io/ingress-chaos"]
+	egress, found := podAnnotations["kubernetes.io/egress-chaos"]
 	if found {
+		json.Unmarshal([]byte(egress), &egressChaosInfo)
 	}
 
-	egressChaosInfo, found = podAnnotations["kubernetes.io/egress-chaos"]
-	if found {
-	}
-
-	return ingressChaosInfo, egressChaosInfo, tcChaosInfo, true, nil
+	return ingressChaosInfo, egressChaosInfo, true, nil
 }
 
 func GetMasterIP(clientset *kubernetes.Clientset) (masterIP string){

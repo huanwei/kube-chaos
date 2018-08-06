@@ -18,9 +18,9 @@ package flow
 
 type Shaper interface {
 	// Reconcile the interface managed by this shaper with the state on the ground.
-	ReconcileInterface(egressChaosInfo, ingressChaosInfo string) error
+	ReconcileInterface(egressChaosInfo, ingressChaosInfo ChaosInfo) error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
-	ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo string) error
+	ReconcileCIDR(cidr string, egressChaosInfo, ingressChaosInfo ChaosInfo) error
 
 	Loss(percentage, relate string) error
 
@@ -32,5 +32,5 @@ type Shaper interface {
 
 	Corrupt(percentage string) error
 
-	ExecTcChaos(info TCChaosInfo) error
+	ExecTcChaos(info ChaosInfo) error
 }

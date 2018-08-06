@@ -76,7 +76,7 @@ func main() {
 		for _, pod := range pods.Items {
 
 			// todo - fix
-			ingressChaosInfo, egressChaosInfo, tcChaosInfo, needUpdate, err := flow.ExtractPodChaosInfo(pod.Annotations)
+			ingressChaosInfo, egressChaosInfo, needUpdate, err := flow.ExtractPodChaosInfo(pod.Annotations)
 			if err != nil {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
@@ -86,12 +86,9 @@ func main() {
 			}
 
 			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
-			if egressChaosInfo != "" {
-				egressPodsCIDRs = append(egressPodsCIDRs, cidr)
-			}
-			if ingressChaosInfo != "" {
-				ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
-			}
+			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
+			ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
+
 
 			// Get pod's veth interface name
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name,flow.GetMasterIP(clientset))
@@ -107,8 +104,8 @@ func main() {
 			}
 			glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
 
-			// Execute tc command in egress
-			shaper.ExecTcChaos(tcChaosInfo)
+			// Execute tc command in ingress
+			shaper.ExecTcChaos(ingressChaosInfo)
 
 			// Update chaos-done flag
 			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
