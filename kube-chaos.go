@@ -57,8 +57,8 @@ func main() {
 		panic(err.Error())
 	}
 
-	masterIP:=flow.GetMasterIP(clientset)
-	hostname,_:=os.Hostname()
+	masterIP := flow.GetMasterIP(clientset)
+	hostname, _ := os.Hostname()
 	// Init ifb module
 	err = flow.InitIfbModule()
 	if err != nil {
@@ -69,7 +69,7 @@ func main() {
 	for {
 		//now:=time.Now()
 		// Only control current node's pods, so select pods using node name
-		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
+		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector, FieldSelector: "spec.nodeName=" + hostname})
 		if err != nil {
 			glog.Errorf("Failed list pods: %v", err)
 		}
@@ -141,7 +141,6 @@ func main() {
 			// Update chaos-done flag
 			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
-
 
 		}
 		//if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
