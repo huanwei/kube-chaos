@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors.
+Copyright 2018 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -49,21 +49,6 @@ qdisc htb 1: root refcnt 2 r2q 10 default 30 direct_packets_stat 0
 */
 func initIfb(ifb string) error {
 	e := exec.New()
-	//data, err := e.Command("tc", "qdisc", "show", "dev", ifb).CombinedOutput()
-	//if err != nil {
-	//	return err
-	//}
-	//scanner := bufio.NewScanner(bytes.NewBuffer(data))
-	//spec := "htb 1:"
-	//for scanner.Scan() {
-	//	line := strings.TrimSpace(scanner.Text())
-	//	if len(line) == 0 {
-	//		continue
-	//	}
-	//	if strings.Contains(line, spec) {
-	//		return nil
-	//	}
-	//}
 	e.Command("tc", "qdisc", "del", "dev", ifb, "root").CombinedOutput()
 	if _, err := e.Command("tc", "qdisc", "add", "dev", ifb, "root", "handle", "1:", "htb", "default", "0").CombinedOutput(); err != nil {
 		return err

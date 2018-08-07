@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors.
+Copyright 2018 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,17 +31,6 @@ type Shaper interface {
 	ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error
 
 	ReconcileMirroring(ifb string, cidr string) error
-
-	//Loss(percentage, relate string) error
-	//
-	//Delay(time, deviation string) error
-	//
-	//Duplicate(percentage string) error
-	//
-	//Reorder(time, percentage, relate string) error
-	//
-	//Corrupt(percentage string) error
-	//Rate(rate string) error
 
 	ExecTcChaos(isIngress bool, info ChaosInfo) error
 }
