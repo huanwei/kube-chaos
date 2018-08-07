@@ -18,10 +18,13 @@ package flow
 
 import (
 	"encoding/json"
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Represent tc chaos information using json encoding
-type TCChaosInfo struct {
+type ChaosInfo struct {
+	Rate  string
 	Delay struct {
 		Set       string
 		Time      string
@@ -51,29 +54,48 @@ type TCChaosInfo struct {
 // Change chaos-done flag to yes
 func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
 	newAnnotations = podAnnotations
-	newAnnotations["chaos-done"] = "yes"
+	newAnnotations["kubernetes.io/done-ingress-chaos"] = "yes"
+	newAnnotations["kubernetes.io/done-egress-chaos"] = "yes"
 	return newAnnotations
 }
 
 // Extract Chaos settings from pod's annotation
-func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, tcChaosInfo TCChaosInfo, needUpdate bool, err error) {
-	done, found := podAnnotations["chaos-done"]
-	if (found && done == "yes")||!found {
-		return "", "", tcChaosInfo, false, nil
+func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo ChaosInfo, ingressNeedUpdate, egressNeedUpdate bool, err error) {
+	ingressDone, found := podAnnotations["kubernetes.io/done-ingress-chaos"]
+	if (found && ingressDone == "yes") || !found {
+		ingressNeedUpdate = false
+	} else {
+		ingressNeedUpdate = true
 	}
 
-	info, found := podAnnotations["TC-chaos"]
+	egressDone, found := podAnnotations["kubernetes.io/done-egress-chaos"]
+	if (found && egressDone == "yes") || !found {
+		egressNeedUpdate = false
+	} else {
+		egressNeedUpdate = true
+	}
+
+	ingress, found := podAnnotations["kubernetes.io/ingress-chaos"]
 	if found {
-		json.Unmarshal([]byte(info), &tcChaosInfo)
+		json.Unmarshal([]byte(ingress), &ingressChaosInfo)
 	}
 
-	ingressChaosInfo, found = podAnnotations["kubernetes.io/ingress-chaos"]
+	egress, found := podAnnotations["kubernetes.io/egress-chaos"]
 	if found {
+		json.Unmarshal([]byte(egress), &egressChaosInfo)
 	}
 
-	egressChaosInfo, found = podAnnotations["kubernetes.io/egress-chaos"]
-	if found {
-	}
+	return ingressChaosInfo, egressChaosInfo, ingressNeedUpdate, egressNeedUpdate, nil
+}
 
-	return ingressChaosInfo, egressChaosInfo, tcChaosInfo, true, nil
+func GetMasterIP(clientset *kubernetes.Clientset) (masterIP string) {
+	nodes, _ := clientset.CoreV1().Nodes().List(meta_v1.ListOptions{LabelSelector: "node-role.kubernetes.io/master="})
+	masterAddrs := nodes.Items[0].Status.Addresses
+
+	for _, addr := range masterAddrs {
+		if addr.Type == "InternalIP" {
+			masterIP = addr.Address
+		}
+	}
+	return masterIP
 }
