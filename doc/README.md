@@ -1,6 +1,8 @@
 # README
 kube-chaos是一个kubernets平台的故障注入组件，使用iproute2实现恶劣网络环境的模拟
 
+注意：运行kube-chaos时，hostname必须与k8s上显示的node名一致，这一般是默认的，但一旦用户主动更改，则会导致kube-chaos运行出错，原因在于k8s没有pod定位自身所在pod的API，因此只能通过hostname来确定所处的Node
+
 ## 文档目录
 
 * **运行方式与原理**
@@ -17,8 +19,11 @@ kube-chaos是一个kubernets平台的故障注入组件，使用iproute2实现�
 
 配置网卡的方案具体为：
 
-* 对于egress流量，直接在Pod所属的虚拟网卡上采用Netem队列进行模拟
-* 对于ingress流量，转发到Node的IFB网卡，在IFB网卡中针对各个Pod分类，在子类中挂载Netem队列，再发送到Pod所属的虚拟网卡，实现对各个Pod的ingress流量的分别控制
+* 对于Pod的ingress流量，直接在Pod所属的虚拟网卡Calicoxxxxxxxxxxx上的egress采用Netem队列进行模拟
+* 对于Pod的egress流量，转发到Node的IFB网卡，在IFB网卡中针对各个Pod分类，在子类中挂载Netem队列，再发送到Pod所属的虚拟网卡，实现对各个Pod的egress流量的分别控制
+
+### 网卡设置示意图
+![](img/interface.png)
 
 
 ## 流程图
@@ -107,10 +112,10 @@ rtt min/avg/max/mdev = 0.346/0.346/0.346/0.000 ms
 目前完成的部分是最底层的执行组件，还没有自动执行的策略，因此需要手动用kubectl指定被测试的应用的所有pod的模拟参数，注意在命令行中需要为`"`符号前增加`\`转义符，例如：
 
 ```
-kubectl annotate pod $1 TC-chaos="{\"Delay\":{\"Set\":\"yes\",\"Time\":\"200ms\",\"Variation\":\"50ms\"}}" chaos-done=no --overwrite
+kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\",\"Time\":\"200ms\",\"Variation\":\"50ms\"}}" kubernetes.io/done-chaos=no --overwrite
 ```
 
-并且要注意的是，要设置chaos-done=no以使设置生效
+并且要注意的是，要设置kubernetes.io/done-chaos=no以使设置生效
 
 后续我们将开发控制端根据策略自动设置并改变参数，并提供更简洁的接口来设置策略
 
@@ -122,7 +127,7 @@ kubectl annotate pod $1 TC-chaos="{\"Delay\":{\"Set\":\"yes\",\"Time\":\"200ms\"
 ---
 
 ### 输出
-* 应用chaos设置后chaos将改变annotation上的chaos-done字段
+* 应用chaos设置后chaos将改变annotation上的kubernetes.io/done-chaos字段
 * 应用chaos设置后对应pod的网卡设置将会根据参数改变
 
 ---
@@ -211,9 +216,9 @@ JSON样例：
 ### 参数更新标志
 由于chaos通过annotation来进行设置，因此需要轮询各个pod的annotation，为此需要设置chaos-done标志来指示设置的状态
 
-* 当新增或更改设置时，将chaos-done设置为no
-* 当chaos组件检测到chaos-done为no时将更新设置，并在完成后将chaos-done置为yes
-* 当chaos组件检测到chaos-done为yes时，跳过当前设置
+* 当新增或更改设置时，将kubernetes.io/done-chaos设置为no
+* 当chaos组件检测到kubernetes.io/done-chaos为no时将更新设置，并在完成后将kubernetes.io/done-chaos置为yes
+* 当chaos组件检测到kubernetes.io/done-chaos为yes时，跳过当前设置
 
 
 ## 类与接口

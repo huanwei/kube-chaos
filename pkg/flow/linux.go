@@ -37,14 +37,16 @@ import (
 // Uses the hierarchical token bucket queuing discipline (htb), this requires Linux 2.4.20 or newer
 // or a custom kernel with that queuing discipline backported.
 type tcShaper struct {
-	e     exec.Interface
-	iface string
+	e       exec.Interface
+	iface   string
+	classid int
 }
 
 func NewTCShaper(iface string) Shaper {
 	shaper := &tcShaper{
-		e:     exec.New(),
-		iface: iface,
+		e:       exec.New(),
+		iface:   iface,
+		classid: -1,
 	}
 	return shaper
 }
@@ -75,7 +77,8 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 		// todo - fix
 		// expected tc line:
 		// class htb 1:1 root prio 0 rate 1000Kbit ceil 1000Kbit burst 1600b cburst 1600b
-		if len(parts) != 14 {
+		// class htb 1:1 root leaf 2: prio 0 rate 800000Kbit ceil 800000Kbit burst 1600b cburst 1600b
+		if len(parts) != 14 && len(parts) != 16 {
 			return -1, fmt.Errorf("unexpected output from tc: %s (%v)", scanner.Text(), parts)
 		}
 		classes.Insert(parts[2])
@@ -176,6 +179,17 @@ func (t *tcShaper) makeNewClass(rate, ifb string) (int, error) {
 	return class, nil
 }
 
+func (t *tcShaper) changeClass(rate, ifb string, classid int) error {
+	if err := t.execAndLog("tc", "class", "change",
+		"dev", ifb,
+		"parent", "1:",
+		"classid", fmt.Sprintf("1:%d", classid),
+		"htb", "rate", rate); err != nil {
+		return err
+	}
+	return nil
+}
+
 // tests to see if an interface exists, if it does, return true and the status line for the interface
 // returns false, "", <err> if an error occurs.
 func (t *tcShaper) qdiscExists(vethName string) (bool, bool, error) {
@@ -203,134 +217,363 @@ func (t *tcShaper) qdiscExists(vethName string) (bool, bool, error) {
 	return rootQdisc, ingressQdisc, nil
 }
 
-func (t *tcShaper) ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo string) error {
-	glog.V(4).Infof("Shaper CIDR %s with egressChaosInfo %s, ingressChaosInfo %s", cidr, egressChaosInfo, ingressChaosInfo)
+func (t *tcShaper) ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error {
+	glog.V(4).Infof("Shaper CIDR %s with ingressChaosInfo %s", cidr, ingressChaosInfo)
 	return nil
 }
 
-func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo string) error {
+func (t *tcShaper) ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error {
+	glog.V(4).Infof("Shaper CIDR %s with egressChaosInfo %s", cidr, egressChaosInfo)
+	return nil
+}
+
+func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
 	e := exec.New()
 	e.Command("tc", "qdisc", "del", "dev", t.iface, "root").CombinedOutput()
 
-	glog.Infof("Adding netem to interface: %s", t.iface)
-	// For test
-	data, err := e.Command("tc", "qdisc", "add", "dev", t.iface, "root", "netem").CombinedOutput()
+	glog.Infof("Adding htb to interface: %s", t.iface)
+	// Add HTB on root(egress)
+	data, err := e.Command("tc", "qdisc", "add", "dev", t.iface, "root", "handle", "1:", "htb", "default", "0").CombinedOutput()
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
 	} else {
-		glog.Infof("Netem added")
+		glog.Infof("HTB on root added")
+	}
+	// Tested highest settable rate on tc
+	rate := "4gbps"
+
+	// Add htb subclass
+	data, err = e.Command("tc", "class", "add", "dev", t.iface, "parent", "1:", "classid", "1:0", "htb", "rate", rate).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
+	} else {
+		glog.Infof("Default htb class 0 added")
+	}
+
+	// Add
+	data, err = e.Command("tc", "qdisc", "add", "dev", t.iface, "parent", "1:0", "netem").CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
+	} else {
+		glog.Infof("Netem on class 0 added")
+	}
+
+	return nil
+}
+
+func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
+	e := exec.New()
+
+	e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
+		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+	).CombinedOutput()
+
+	// For egress test
+	data, err := e.Command("tc", "qdisc", "add", "dev", "ifb0", "parent",
+		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+		"netem").CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
+	} else {
+		glog.Infof("Egress netem added")
 	}
 	return nil
 }
 
-func (t *tcShaper) Loss(percentage, relate string) error {
+func (t *tcShaper) ReconcileMirroring(ifb string, cidr string) error {
+	e := exec.New()
+
+	// Check if ingress was already added.
+	data, err := e.Command("tc", "qdisc", "show", "dev", t.iface, "ingress").CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
+	}
+	scanner := bufio.NewScanner(bytes.NewBuffer(data))
+	ingressAdded := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// skip empty lines
+		if len(line) == 0 {
+			continue
+		}
+		parts := strings.Split(line, " ")
+		// todo - fix
+		// expected tc line:
+		// qdisc noqueue 0: root refcnt 2
+		// qdisc ingress ffff: parent ffff:fff1 ----------------
+		if parts[1] == "ingress" {
+			ingressAdded = true
+			glog.Infof("Ingress was already added")
+			break
+		}
+	}
+
+	// Add qdisc of ingress
+	if !ingressAdded {
+		data, err = e.Command("tc", "qdisc", "add", "dev", t.iface, "ingress").CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Ingress added")
+		}
+	}
+
+	// Create a class
+	classid, err := t.makeNewClass("4gbps", "ifb0")
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n", err)
+		return err
+	} else {
+		t.classid = classid
+		glog.Infof("IFB class added")
+	}
+
+	// Mirror the ingress of caliXXX to ifb
+	data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "ffff:", "protocol", "ip",
+		"prio", "1", "u32", "match", "u32", "0", "0", "flowid", fmt.Sprintf("1:%d", t.classid),
+		"action", "mirred", "egress", "redirect", "dev", ifb).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
+	} else {
+		glog.Infof("Ingress mirrored")
+	}
+
+	// Add a filter
+	data, err = e.Command("tc", "filter", "add", "dev", ifb, "parent", "1:0", "protocol", "ip",
+		"prio", "1", "u32", "match", "ip", "src", cidr, "flowid", fmt.Sprintf("1:%d", t.classid),
+	).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
+	} else {
+		glog.Infof("Filter added")
+	}
+	return nil
+}
+
+func (t *tcShaper) Rate(isIngress bool, rate string) error {
+	e := exec.New()
+
+	// For test
+	if isIngress {
+		glog.Infof("Adding rate %s to interface: %s", rate, t.iface)
+		data, err := e.Command("tc", "class", "change", "dev", t.iface, "parent", "1:", "classid", "1:0", "htb", "rate", rate).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Rate changed to %s", rate)
+		}
+	} else {
+		glog.Infof("Adding rate %s to interface: %s", rate, "ifb0")
+		t.changeClass(rate, "ifb0", t.classid)
+	}
+
+	return nil
+}
+
+func (t *tcShaper) Loss(isIngress bool, percentage, relate string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
 	e := exec.New()
-	glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, t.iface)
+
 	// For test
-	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "loss", percentage, relate).CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s\n%s", err, data)
-		return err
+	if isIngress {
+		glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, t.iface)
+		data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "parent", "1:0", "netem", "loss", percentage, relate).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Loss added")
+		}
 	} else {
-		glog.Infof("Loss added")
+		glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, "ifb0")
+		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
+			fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+			"netem", "loss", percentage, relate).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Loss added")
+		}
 	}
+
 	return nil
 }
 
-func (t *tcShaper) Delay(time, deviation string) error {
+func (t *tcShaper) Delay(isIngress bool, time, deviation string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
 	//												 basis	devi  devirate
 	e := exec.New()
-	glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, t.iface)
+
 	// For test
-	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "delay", time, deviation).CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s\n%s", err, data)
-		return err
+
+	if isIngress {
+		glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, t.iface)
+		data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "parent", "1:0", "netem", "delay", time, deviation).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Delay added")
+		}
 	} else {
-		glog.Infof("Delay added")
+		glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, "ifb0")
+		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
+			fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+			"netem", "delay", time, deviation).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Delay added")
+		}
 	}
 	return nil
 }
 
-func (t *tcShaper) Duplicate(percentage string) error {
+func (t *tcShaper) Duplicate(isIngress bool, percentage string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  duplicate 1%
 	e := exec.New()
-	glog.Infof("Adding duplicate %s to interface: %s", percentage, t.iface)
+
 	// For test
-	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "duplicate", percentage).CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s ,\n%s", err, data)
-		return err
+	if isIngress {
+		glog.Infof("Adding duplicate %s to interface: %s", percentage, t.iface)
+		data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "parent", "1:0", "netem", "duplicate", percentage).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s ,\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Duplicate added")
+		}
 	} else {
-		glog.Infof("Duplicate added")
+		glog.Infof("Adding duplicate %s to interface: %s", percentage, "ifb0")
+		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
+			fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+			"netem", "duplicate", percentage).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s ,\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Duplicate added")
+		}
 	}
+
 	return nil
 }
 
-func (t *tcShaper) Reorder(time, percentage, relate string) error {
+func (t *tcShaper) Reorder(isIngress bool, time, percentage, relate string) error {
 	// tc  qdisc  change  dev  eth0  root  netem  delay  10ms   reorder  25%  50%
 	e := exec.New()
-	glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, t.iface)
+
 	// For test
-	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s ,\n%s", err, data)
-		return err
+	if isIngress {
+		glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, t.iface)
+		data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "parent", "1:0", "netem",
+			"delay", time, "reorder", percentage, relate).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s ,\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Reorder added")
+		}
 	} else {
-		glog.Infof("Duplicate added")
+		glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, "ifb0")
+		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
+			fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+			"netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s ,\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Reorder added")
+		}
 	}
 	return nil
 }
 
-func (t *tcShaper) Corrupt(percentage string) error {
+func (t *tcShaper) Corrupt(isIngress bool, percentage string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  corrupt  0.2%
 	e := exec.New()
-	glog.Infof("Adding corrupt %s to interface: %s", percentage, t.iface)
+
 	// For test
-	data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "root", "netem", "corrupt", percentage).CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s ,\n%s", err, data)
-		return err
+	if isIngress {
+		glog.Infof("Adding corrupt %s to interface: %s", percentage, t.iface)
+		data, err := e.Command("tc", "qdisc", "change", "dev", t.iface, "parent", "1:0", "netem", "corrupt", percentage).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s ,\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Corrupt added")
+		}
 	} else {
-		glog.Infof("Corrupt added")
+		glog.Infof("Adding corrupt %s to interface: %s", percentage, "ifb0")
+		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
+			fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+			"netem", "corrupt", percentage).CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s ,\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Corrupt added")
+		}
 	}
 	return nil
 }
 
-func (t *tcShaper) Clear(percentage, relate string) error {
+func (t *tcShaper) Clear(isIngress bool, percentage, relate string) error {
 	e := exec.New()
-	glog.Infof("Deleting netem in interface: %s", t.iface)
+	glog.Infof("Deleting HTB in interface: %s", t.iface)
 	// For test
-	data, err := e.Command("tc", "qdisc", "del", "dev", t.iface, "root", "netem").CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s\n%s", err, data)
-		return err
+
+	if isIngress {
+		data, err := e.Command("tc", "qdisc", "del", "dev", t.iface, "root").CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Netem deleted")
+		}
 	} else {
-		glog.Infof("Netem deleted")
+		data, err := e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
+			fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+			"netem").CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Netem deleted")
+		}
 	}
 	return nil
 }
 
-func (t *tcShaper) ExecTcChaos(info TCChaosInfo) error {
+func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
+	t.Rate(isIngress, info.Rate)
 	if info.Delay.Set == "yes" {
-		return t.Delay(info.Delay.Time, info.Delay.Variation)
+		return t.Delay(isIngress, info.Delay.Time, info.Delay.Variation)
 	}
 	if info.Loss.Set == "yes" {
-		return t.Loss(info.Loss.Percentage, info.Loss.Relate)
+		return t.Loss(isIngress, info.Loss.Percentage, info.Loss.Relate)
 	}
 	if info.Duplicate.Set == "yes" {
-		return t.Duplicate(info.Duplicate.Percentage)
+		return t.Duplicate(isIngress, info.Duplicate.Percentage)
 	}
 	if info.Reorder.Set == "yes" {
-		return t.Reorder(info.Reorder.Time, info.Reorder.Percengtage, info.Reorder.Relate)
+		return t.Reorder(isIngress, info.Reorder.Time, info.Reorder.Percengtage, info.Reorder.Relate)
 	}
 	if info.Corrupt.Set == "yes" {
-		return t.Corrupt(info.Corrupt.Percentage)
+		return t.Corrupt(isIngress, info.Corrupt.Percentage)
 	}
-	return errors.New("No tc Chaos Info set")
+	return errors.New("No Chaos Info set")
 }
 
 // Remove a bandwidth limit for a particular CIDR on a particular network interface
