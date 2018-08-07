@@ -260,6 +260,9 @@ func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo ChaosInf
 	}
 
 	// For egress test
+	data, err = e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
+		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+		"netem").CombinedOutput()
 	data, err = e.Command("tc", "qdisc", "add", "dev", "ifb0", "parent",
 		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
 		"netem").CombinedOutput()

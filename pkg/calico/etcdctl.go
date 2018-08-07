@@ -18,6 +18,7 @@ func GetWorkload(namespace, nodeName, podName,masterIP string) Workload {
 
 	//data, err := e.Command("etcdctl", "get", "--endpoints=10.211.55.10:6666","--prefix",
 	//	"/calico/resources/v3/projectcalico.org/workloadendpoints/"+namespace+"/"+nodeName+"-k8s-"+podName+"-eth0").CombinedOutput()
+	//ETCDCTL_API=3 etcdctl get --endpoints=10.211.55.10:6666 --prefix /calico/resources/v3/projectcalico.org/workloadendpoints/
 
 	podNames := strings.Split(podName, "-")
 	newPodName := strings.Join(podNames, "--")

@@ -58,7 +58,7 @@ func main() {
 	}
 
 	masterIP:=flow.GetMasterIP(clientset)
-
+	hostname,_:=os.Hostname()
 	// Init ifb module
 	err = flow.InitIfbModule()
 	if err != nil {
@@ -68,10 +68,7 @@ func main() {
 	// Synchronize pods and do chaos
 	for {
 		now:=time.Now()
-
-
 		// Only control current node's pods, so select pods using node name
-		hostname,_:=os.Hostname()
 		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
 		if err != nil {
 			glog.Errorf("Failed list pods: %v", err)
