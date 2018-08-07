@@ -34,16 +34,16 @@ import (
 func main() {
 	var (
 		kubeconfig    string
-		endpoint      string
+		//endpoint      string
 		labelSelector string
 		syncDuration  int
 		shaper flow.Shaper
 	)
 	shaperMap := map[string]flow.Shaper{}
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
-	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
+	//flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
-	flag.IntVar(&syncDuration, "syncDuration", 10, "sync duration(seconds)")
+	flag.IntVar(&syncDuration, "syncDuration", 1, "sync duration(seconds)")
 	flag.Parse()
 	// Uses the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
@@ -56,13 +56,20 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
+
+	masterIP:=flow.GetMasterIP(clientset)
+
 	// Init ifb module
 	err = flow.InitIfbModule()
 	if err != nil {
 		glog.Errorf("Failed init ifb: %v", err)
 	}
+
 	// Synchronize pods and do chaos
 	for {
+		now:=time.Now()
+
+
 		// Only control current node's pods, so select pods using node name
 		hostname,_:=os.Hostname()
 		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
@@ -83,7 +90,7 @@ func main() {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
 			if !needUpdate {
-				glog.Infof("pod %s's setting has deployed, skip", pod.Name)
+				//glog.Infof("pod %s's setting has deployed, skip", pod.Name)
 				continue
 			}
 
@@ -93,7 +100,7 @@ func main() {
 
 
 			// Get pod's veth interface name
-			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name,flow.GetMasterIP(clientset))
+			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name,masterIP)
 
 			// Get shaper from the map
 			if shaperMap[workload.Spec.InterfaceName] == nil {
@@ -131,6 +138,8 @@ func main() {
 		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}
+		elapsed:=time.Since(now)
+		glog.Infof("iteration time used: %v",elapsed)
 		// Sleep to avoid high CPU usage
 		time.Sleep(time.Duration(syncDuration) * time.Second)
 	}

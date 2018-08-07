@@ -54,7 +54,7 @@ type ChaosInfo struct {
 // Change chaos-done flag to yes
 func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
 	newAnnotations = podAnnotations
-	newAnnotations["chaos-done"] = "yes"
+	newAnnotations["kubernetes.io/done-chaos"] = "yes"
 	return newAnnotations
 }
 
