@@ -57,8 +57,8 @@ func main() {
 		panic(err.Error())
 	}
 
-	masterIP:=flow.GetMasterIP(clientset)
-	hostname,_:=os.Hostname()
+	masterIP := flow.GetMasterIP(clientset)
+	hostname, _ := os.Hostname()
 	// Init ifb module
 	err = flow.InitIfbModule()
 	if err != nil {
@@ -69,7 +69,7 @@ func main() {
 	for {
 		//now:=time.Now()
 		// Only control current node's pods, so select pods using node name
-		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
+		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector, FieldSelector: "spec.nodeName=" + hostname})
 		if err != nil {
 			glog.Errorf("Failed list pods: %v", err)
 		}
@@ -86,10 +86,13 @@ func main() {
 			if err != nil {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
+
 			if !ingressNeedUpdate && !egressNeedUpdate {
 				//glog.Infof("pod %s's setting has deployed, skip", pod.Name)
 				continue
 			}
+
+			ingressNeedClear, egressNeedClear := flow.GetClearFlag(pod.Annotations)
 
 			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
 			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
@@ -109,39 +112,49 @@ func main() {
 				shaper = shaperMap[workload.Spec.InterfaceName]
 			}
 			if ingressNeedUpdate {
-				// Config pod interface  qdisc, and mirror to ifb
-				if err := shaper.ReconcileIngressInterface(ingressChaosInfo); err != nil {
-					glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
-				}
+				// First clear interface
+				shaper.ClearIngressInterface()
 
-				if err := shaper.ReconcileIngressCIDR(cidr, ingressChaosInfo); err != nil {
-					glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
-				}
-				glog.V(4).Infof("reconcile cidr %s with ingressChaosInfo %s ", cidr, ingressChaosInfo)
+				if !ingressNeedClear {
+					// Config pod interface  qdisc
+					if err := shaper.ReconcileIngressInterface(ingressChaosInfo); err != nil {
+						glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
+					}
 
-				// Execute tc command in ingress
-				shaper.ExecTcChaos(true, ingressChaosInfo)
+					if err := shaper.ReconcileIngressCIDR(cidr, ingressChaosInfo); err != nil {
+						glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
+					}
+					glog.V(4).Infof("reconcile cidr %s with ingressChaosInfo %s ", cidr, ingressChaosInfo)
+
+					// Execute tc command in ingress
+					shaper.ExecTcChaos(true, ingressChaosInfo)
+				}
 			}
 
 			if egressNeedUpdate {
-				// Config pod interface  qdisc, and mirror to ifb
-				if err := shaper.ReconcileEgressInterface(egressChaosInfo); err != nil {
-					glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
+				// First clear interface
+				shaper.ClearEgressInterface()
+
+				if !egressNeedClear {
+					// Config pod interface  qdisc, and mirror to ifb
+					if err := shaper.ReconcileEgressInterface(egressChaosInfo); err != nil {
+						glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
+					}
+
+					if err := shaper.ReconcileEgressCIDR(cidr, egressChaosInfo); err != nil {
+						glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
+					}
+					glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s ", cidr, egressChaosInfo)
+
+					// Execute tc command in egress
+					shaper.ExecTcChaos(false, egressChaosInfo)
 				}
 
-				if err := shaper.ReconcileEgressCIDR(cidr, egressChaosInfo); err != nil {
-					glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
-				}
-				glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s ", cidr, egressChaosInfo)
-
-				// Execute tc command in egress
-				shaper.ExecTcChaos(false, egressChaosInfo)
 			}
 
 			// Update chaos-done flag
-			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
+			pod.SetAnnotations(flow.SetPodChaosUpdated(ingressNeedUpdate,egressNeedUpdate,ingressNeedClear, egressNeedClear, pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
-
 
 		}
 		//if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {

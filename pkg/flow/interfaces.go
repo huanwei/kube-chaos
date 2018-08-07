@@ -19,10 +19,14 @@ package flow
 type Shaper interface {
 	// Reconcile the interface managed by this shaper with the state on the ground.
 	ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error
+	// Clear the ingress interface
+	ClearIngressInterface() error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
 	ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error
 	// Reconcile the interface managed by this shaper with the state on the ground.
 	ReconcileEgressInterface(egressChaosInfo ChaosInfo) error
+	// Clear the egress interface
+	ClearEgressInterface() error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
 	ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error
 

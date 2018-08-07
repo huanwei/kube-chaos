@@ -264,12 +264,15 @@ func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
 	return nil
 }
 
+func (t *tcShaper) ClearIngressInterface() error {
+	e := exec.New()
+	glog.Infof("Clear ingress interface: %s", t.iface)
+	e.Command("tc", "qdisc", "del", "dev", t.iface, "root").CombinedOutput()
+	return nil
+}
+
 func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
 	e := exec.New()
-
-	e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
-		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
-	).CombinedOutput()
 
 	// For egress test
 	data, err := e.Command("tc", "qdisc", "add", "dev", "ifb0", "parent",
@@ -281,6 +284,17 @@ func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
 	} else {
 		glog.Infof("Egress netem added")
 	}
+	return nil
+}
+
+func (t *tcShaper) ClearEgressInterface() error {
+	e := exec.New()
+
+	glog.Infof("Clear egress interface of class id: %d", t.classid)
+	e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
+		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
+	).CombinedOutput()
+
 	return nil
 }
 
