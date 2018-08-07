@@ -18,13 +18,13 @@ package flow
 
 import (
 	"encoding/json"
-	"k8s.io/client-go/kubernetes"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Represent tc chaos information using json encoding
 type ChaosInfo struct {
-	Rate 	string
+	Rate  string
 	Delay struct {
 		Set       string
 		Time      string
@@ -54,15 +54,25 @@ type ChaosInfo struct {
 // Change chaos-done flag to yes
 func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
 	newAnnotations = podAnnotations
-	newAnnotations["kubernetes.io/done-chaos"] = "yes"
+	newAnnotations["kubernetes.io/done-ingress-chaos"] = "yes"
+	newAnnotations["kubernetes.io/done-egress-chaos"] = "yes"
 	return newAnnotations
 }
 
 // Extract Chaos settings from pod's annotation
-func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo ChaosInfo, needUpdate bool, err error) {
-	done, found := podAnnotations["kubernetes.io/done-chaos"]
-	if (found && done == "yes")||!found {
-		return ingressChaosInfo, egressChaosInfo, false, nil
+func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo ChaosInfo, ingressNeedUpdate, egressNeedUpdate bool, err error) {
+	ingressDone, found := podAnnotations["kubernetes.io/done-ingress-chaos"]
+	if (found && ingressDone == "yes") || !found {
+		ingressNeedUpdate = false
+	} else {
+		ingressNeedUpdate = true
+	}
+
+	egressDone, found := podAnnotations["kubernetes.io/done-egress-chaos"]
+	if (found && egressDone == "yes") || !found {
+		egressNeedUpdate = false
+	} else {
+		egressNeedUpdate = true
 	}
 
 	ingress, found := podAnnotations["kubernetes.io/ingress-chaos"]
@@ -75,16 +85,16 @@ func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, eg
 		json.Unmarshal([]byte(egress), &egressChaosInfo)
 	}
 
-	return ingressChaosInfo, egressChaosInfo, true, nil
+	return ingressChaosInfo, egressChaosInfo, ingressNeedUpdate, egressNeedUpdate, nil
 }
 
-func GetMasterIP(clientset *kubernetes.Clientset) (masterIP string){
-	nodes,_:=clientset.CoreV1().Nodes().List(meta_v1.ListOptions{LabelSelector:"node-role.kubernetes.io/master="})
-	masterAddrs:=nodes.Items[0].Status.Addresses
+func GetMasterIP(clientset *kubernetes.Clientset) (masterIP string) {
+	nodes, _ := clientset.CoreV1().Nodes().List(meta_v1.ListOptions{LabelSelector: "node-role.kubernetes.io/master="})
+	masterAddrs := nodes.Items[0].Status.Addresses
 
-	for _, addr:=range masterAddrs{
-		if addr.Type=="InternalIP"{
-			masterIP=addr.Address
+	for _, addr := range masterAddrs {
+		if addr.Type == "InternalIP" {
+			masterIP = addr.Address
 		}
 	}
 	return masterIP

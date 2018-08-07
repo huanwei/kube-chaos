@@ -18,11 +18,15 @@ package flow
 
 type Shaper interface {
 	// Reconcile the interface managed by this shaper with the state on the ground.
-	ReconcileInterface(egressChaosInfo, ingressChaosInfo ChaosInfo) error
+	ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
-	ReconcileCIDR(cidr string, egressChaosInfo, ingressChaosInfo ChaosInfo) error
+	ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error
+	// Reconcile the interface managed by this shaper with the state on the ground.
+	ReconcileEgressInterface(egressChaosInfo ChaosInfo) error
+	// Reconcile a CIDR managed by this shaper with the state on the ground
+	ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error
 
-    ReconcileMirroring(ifb string, cidr string, egressChaosInfo, ingressChaosInfo ChaosInfo) error
+	ReconcileMirroring(ifb string, cidr string) error
 
 	//Loss(percentage, relate string) error
 	//
@@ -36,8 +40,4 @@ type Shaper interface {
 	//Rate(rate string) error
 
 	ExecTcChaos(isIngress bool, info ChaosInfo) error
-
-
-
-
 }

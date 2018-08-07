@@ -33,11 +33,11 @@ import (
 
 func main() {
 	var (
-		kubeconfig    string
+		kubeconfig string
 		//endpoint      string
 		labelSelector string
 		syncDuration  int
-		shaper flow.Shaper
+		shaper        flow.Shaper
 	)
 	shaperMap := map[string]flow.Shaper{}
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
@@ -57,7 +57,7 @@ func main() {
 		panic(err.Error())
 	}
 
-	masterIP:=flow.GetMasterIP(clientset)
+	masterIP := flow.GetMasterIP(clientset)
 
 	// Init ifb module
 	err = flow.InitIfbModule()
@@ -67,12 +67,11 @@ func main() {
 
 	// Synchronize pods and do chaos
 	for {
-		now:=time.Now()
-
+		now := time.Now()
 
 		// Only control current node's pods, so select pods using node name
-		hostname,_:=os.Hostname()
-		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
+		hostname, _ := os.Hostname()
+		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector, FieldSelector: "spec.nodeName=" + hostname})
 		if err != nil {
 			glog.Errorf("Failed list pods: %v", err)
 		}
@@ -85,11 +84,11 @@ func main() {
 		for _, pod := range pods.Items {
 
 			// todo - fix
-			ingressChaosInfo, egressChaosInfo, needUpdate, err := flow.ExtractPodChaosInfo(pod.Annotations)
+			ingressChaosInfo, egressChaosInfo, ingressNeedUpdate, egressNeedUpdate, err := flow.ExtractPodChaosInfo(pod.Annotations)
 			if err != nil {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
-			if !needUpdate {
+			if !ingressNeedUpdate && !egressNeedUpdate {
 				//glog.Infof("pod %s's setting has deployed, skip", pod.Name)
 				continue
 			}
@@ -98,48 +97,59 @@ func main() {
 			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
 			ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
 
-
 			// Get pod's veth interface name
-			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name,masterIP)
+			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, masterIP)
 
 			// Get shaper from the map
 			if shaperMap[workload.Spec.InterfaceName] == nil {
 				shaper = flow.NewTCShaper(workload.Spec.InterfaceName)
 				shaperMap[workload.Spec.InterfaceName] = shaper
-				if err := shaper.ReconcileMirroring("ifb0", cidr, egressChaosInfo, ingressChaosInfo); err != nil {
+				if err := shaper.ReconcileMirroring("ifb0", cidr); err != nil {
 					glog.Errorf("Failed to mirror veth(%s): %v", workload.Spec.InterfaceName, err)
 				}
 			} else {
 				shaper = shaperMap[workload.Spec.InterfaceName]
 			}
+			if ingressNeedUpdate {
+				// Config pod interface  qdisc, and mirror to ifb
+				if err := shaper.ReconcileIngressInterface(ingressChaosInfo); err != nil {
+					glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
+				}
 
-			// Config pod interface  qdisc, and mirror to ifb
-			if err := shaper.ReconcileInterface(egressChaosInfo, ingressChaosInfo); err != nil {
-				glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
+				if err := shaper.ReconcileIngressCIDR(cidr, ingressChaosInfo); err != nil {
+					glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
+				}
+				glog.V(4).Infof("reconcile cidr %s with ingressChaosInfo %s ", cidr, ingressChaosInfo)
+
+				// Execute tc command in ingress
+				shaper.ExecTcChaos(true, ingressChaosInfo)
 			}
 
-			if err := shaper.ReconcileCIDR(cidr, egressChaosInfo, ingressChaosInfo); err != nil {
-				glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
+			if egressNeedUpdate {
+				// Config pod interface  qdisc, and mirror to ifb
+				if err := shaper.ReconcileEgressInterface(egressChaosInfo); err != nil {
+					glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
+				}
+
+				if err := shaper.ReconcileEgressCIDR(cidr, egressChaosInfo); err != nil {
+					glog.Errorf("Failed to reconcile CIDR %s: %v", cidr, err)
+				}
+				glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s ", cidr, egressChaosInfo)
+
+				// Execute tc command in egress
+				shaper.ExecTcChaos(false, egressChaosInfo)
 			}
-			glog.V(4).Infof("reconcile cidr %s with egressChaosInfo %s and ingressChaosInfo %s ", cidr, egressChaosInfo, ingressChaosInfo)
-
-			// Execute tc command in ingress
-			shaper.ExecTcChaos(true, ingressChaosInfo)
-
-			// Execute tc command in egress
-			shaper.ExecTcChaos(false, egressChaosInfo)
 
 			// Update chaos-done flag
 			pod.SetAnnotations(flow.SetPodChaosUpdated(pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
-
 		}
-		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
-			glog.Errorf("Failed to delete extra chaos: %v", err)
-		}
-		elapsed:=time.Since(now)
-		glog.Infof("iteration time used: %v",elapsed)
+		//if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
+		//	glog.Errorf("Failed to delete extra chaos: %v", err)
+		//}
+		elapsed := time.Since(now)
+		glog.Infof("iteration time used: %v", elapsed)
 		// Sleep to avoid high CPU usage
 		time.Sleep(time.Duration(syncDuration) * time.Second)
 	}
