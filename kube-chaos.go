@@ -67,7 +67,7 @@ func main() {
 
 	// Synchronize pods and do chaos
 	for {
-		now:=time.Now()
+		//now:=time.Now()
 		// Only control current node's pods, so select pods using node name
 		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector,FieldSelector:"spec.nodeName="+hostname})
 		if err != nil {
@@ -132,11 +132,11 @@ func main() {
 
 
 		}
-		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
-			glog.Errorf("Failed to delete extra chaos: %v", err)
-		}
-		elapsed:=time.Since(now)
-		glog.Infof("iteration time used: %v",elapsed)
+		//if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
+		//	glog.Errorf("Failed to delete extra chaos: %v", err)
+		//}
+		//elapsed:=time.Since(now)
+		//glog.Infof("iteration time used: %v",elapsed)
 		// Sleep to avoid high CPU usage
 		time.Sleep(time.Duration(syncDuration) * time.Second)
 	}
