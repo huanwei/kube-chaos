@@ -13,7 +13,7 @@ type Workload struct {
 	}
 }
 
-func GetWorkload(namespace, nodeName, podName,masterIP string) Workload {
+func GetWorkload(namespace, nodeName, podName, masterIP string) Workload {
 	e := exec.New()
 
 	//data, err := e.Command("etcdctl", "get", "--endpoints=10.211.55.10:6666","--prefix",

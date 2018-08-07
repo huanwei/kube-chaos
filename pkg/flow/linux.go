@@ -217,17 +217,19 @@ func (t *tcShaper) qdiscExists(vethName string) (bool, bool, error) {
 	return rootQdisc, ingressQdisc, nil
 }
 
-func (t *tcShaper) ReconcileCIDR(cidr string, egressChaosInfo, ingressChaosInfo ChaosInfo) error {
-	glog.V(4).Infof("Shaper CIDR %s with egressChaosInfo %s, ingressChaosInfo %s", cidr, egressChaosInfo, ingressChaosInfo)
+func (t *tcShaper) ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error {
+	glog.V(4).Infof("Shaper CIDR %s with ingressChaosInfo %s", cidr, ingressChaosInfo)
 	return nil
 }
 
-func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error {
+	glog.V(4).Infof("Shaper CIDR %s with egressChaosInfo %s", cidr, egressChaosInfo)
+	return nil
+}
+
+func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
 	e := exec.New()
 	e.Command("tc", "qdisc", "del", "dev", t.iface, "root").CombinedOutput()
-	e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
-		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
-	).CombinedOutput()
 
 	glog.Infof("Adding htb to interface: %s", t.iface)
 	// Add HTB on root(egress)
@@ -259,11 +261,18 @@ func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo ChaosInf
 		glog.Infof("Netem on class 0 added")
 	}
 
-	// For egress test
-	data, err = e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
+	return nil
+}
+
+func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
+	e := exec.New()
+
+	e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
 		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
-		"netem").CombinedOutput()
-	data, err = e.Command("tc", "qdisc", "add", "dev", "ifb0", "parent",
+	).CombinedOutput()
+
+	// For egress test
+	data, err := e.Command("tc", "qdisc", "add", "dev", "ifb0", "parent",
 		fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
 		"netem").CombinedOutput()
 	if err != nil {
@@ -275,16 +284,44 @@ func (t *tcShaper) ReconcileInterface(egressChaosInfo, ingressChaosInfo ChaosInf
 	return nil
 }
 
-func (t *tcShaper) ReconcileMirroring(ifb string, cidr string, egressChaosInfo, ingressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileMirroring(ifb string, cidr string) error {
 	e := exec.New()
-	// Add qdisc of ingress
-	data, err := e.Command("tc", "qdisc", "del", "dev", t.iface, "ingress").CombinedOutput()
-	data, err = e.Command("tc", "qdisc", "add", "dev", t.iface, "ingress").CombinedOutput()
+
+	// Check if ingress was already added.
+	data, err := e.Command("tc", "qdisc", "show", "dev", t.iface, "ingress").CombinedOutput()
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
-	} else {
-		glog.Infof("Ingress added")
+	}
+	scanner := bufio.NewScanner(bytes.NewBuffer(data))
+	ingressAdded := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// skip empty lines
+		if len(line) == 0 {
+			continue
+		}
+		parts := strings.Split(line, " ")
+		// todo - fix
+		// expected tc line:
+		// qdisc noqueue 0: root refcnt 2
+		// qdisc ingress ffff: parent ffff:fff1 ----------------
+		if parts[1] == "ingress" {
+			ingressAdded = true
+			glog.Infof("Ingress was already added")
+			break
+		}
+	}
+
+	// Add qdisc of ingress
+	if !ingressAdded {
+		data, err = e.Command("tc", "qdisc", "add", "dev", t.iface, "ingress").CombinedOutput()
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n%s", err, data)
+			return err
+		} else {
+			glog.Infof("Ingress added")
+		}
 	}
 
 	// Create a class
@@ -508,7 +545,7 @@ func (t *tcShaper) Clear(isIngress bool, percentage, relate string) error {
 	} else {
 		data, err := e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
 			fmt.Sprintf("1:%d", t.classid), "handle", fmt.Sprintf("%d:1", t.classid+1),
-			"netem", ).CombinedOutput()
+			"netem").CombinedOutput()
 		if err != nil {
 			glog.Errorf("TC exec error: %s\n%s", err, data)
 			return err

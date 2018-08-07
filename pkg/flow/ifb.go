@@ -64,7 +64,7 @@ func initIfb(ifb string) error {
 	//		return nil
 	//	}
 	//}
-	e.Command("tc","qdisc","del","dev",ifb,"root").CombinedOutput()
+	e.Command("tc", "qdisc", "del", "dev", ifb, "root").CombinedOutput()
 	if _, err := e.Command("tc", "qdisc", "add", "dev", ifb, "root", "handle", "1:", "htb", "default", "0").CombinedOutput(); err != nil {
 		return err
 	}
