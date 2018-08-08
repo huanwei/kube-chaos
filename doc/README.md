@@ -53,13 +53,13 @@ kube-chaos通过label识别要控制的Node和Pod，对于Node，需要为想要
 这一步也可以在kube-chaos启动后进行。
 
 ### 进行部署
-kube-chaos以Daemonset的方式部署，部署配置在项目目录中的chaos-daemonset.yaml中，在kube-chaos镜像生成后，使用kubectl根据该配置文件来部署kube-chaos:
+kube-chaos以Daemonset的方式部署，部署配置在项目根目录中的chaos-daemonset.yaml中，在kube-chaos镜像生成后，使用kubectl根据该配置文件来部署kube-chaos:
 `kubectl apply -f chaos-daemonset.yaml`
 
-项目中有一个autodeploy.sh文件，它包含了该条指令，执行`sh autodeploy.sh`效果相同。
+项目中的testpod目录下有一个autodeploy.sh文件，它包含了该条指令，执行`sh autodeploy.sh`效果相同。
 
 ### 停止故障注入
-如果想要在停止kube-chaos后继续正常运行被注入的Pod，需要首先为这些Pod的annotation中增加`chaos-reset=yes`标签，并等待该标签内容变成`chaos-reset=sucess`，此时针对该pod的故障注入配置将被清空，在所有被注入的Pod上完成该步骤后，可以将kube-chaos从集群中删除。
+如果想要在停止kube-chaos后继续正常运行被注入的Pod，需要首先为这些Pod的annotation中增加`ingressNeedClear`或 `egressNeedClear` 标签，并等待该标签消失，此时针对该pod的ingress或egress故障注入配置将被清空，在所有被注入的Pod上完成该步骤后，可以将kube-chaos从集群中删除。
 
 如果被注入的Pod也将同时关闭，则不需要上述步骤，直接在集群中删除kube-chaos即可。
 
@@ -113,13 +113,13 @@ rtt min/avg/max/mdev = 0.346/0.346/0.346/0.000 ms
 观察测试的类型和参数并且观察ping的结果，可以用于确认kube-chaos是否正常运行并注入故障。
 
 ## 使用方式
-目前完成的部分是最底层的执行组件，还没有自动执行的策略，因此需要手动用kubectl指定被测试的应用的所有pod的模拟参数，注意在命令行中需要为`"`符号前增加`\`转义符，例如：
+目前完成的部分是最底层的执行组件，还没有自动执行的策略，因此需要手动用kubectl指定被测试的应用的所有pod的模拟参数，注意在命令行中需要为`"`符号前增加`\`转义符，例如在ingress方向加入延迟：
 
 ```
-kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\",\"Time\":\"200ms\",\"Variation\":\"50ms\"}}" kubernetes.io/done-chaos=no --overwrite
+kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\",\"Time\":\"200ms\",\"Variation\":\"50ms\"},\"Rate\":\"100kbps\"}" kubernetes.io/done-ingress-chaos=no --overwrite
 ```
 
-并且要注意的是，要设置`kubernetes.io/done-chaos=no`以使设置生效。
+并且要注意的是，要设置kubernetes.io/done-ingress-chaos=no以使设置生效，egress方向的设置类似。
 
 后续我们将开发控制端根据策略自动设置并改变参数，并提供更简洁的接口来设置策略。
 
@@ -131,7 +131,7 @@ kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\"
 ---
 
 ### 输出
-* 应用chaos设置后chaos将改变annotation上的`kubernetes.io/done-chaos`字段；
+* 应用chaos设置后chaos将改变annotation上的`kubernetes.io/done-ingress-chaos`字段和`kubernetes.io/done-egress-chaos`字段；
 * 应用chaos设置后对应pod的网卡设置将会根据参数改变。
 
 ---
