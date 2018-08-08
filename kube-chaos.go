@@ -87,16 +87,16 @@ func main() {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
 
+			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
+			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
+			ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
+
 			if !ingressNeedUpdate && !egressNeedUpdate {
 				//glog.Infof("pod %s's setting has deployed, skip", pod.Name)
 				continue
 			}
 
 			ingressNeedClear, egressNeedClear := flow.GetClearFlag(pod.Annotations)
-
-			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
-			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
-			ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
 
 			// Get pod's veth interface name
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, masterIP)
@@ -153,13 +153,13 @@ func main() {
 			}
 
 			// Update chaos-done flag
-			pod.SetAnnotations(flow.SetPodChaosUpdated(ingressNeedUpdate,egressNeedUpdate,ingressNeedClear, egressNeedClear, pod.Annotations))
+			pod.SetAnnotations(flow.SetPodChaosUpdated(ingressNeedUpdate, egressNeedUpdate, ingressNeedClear, egressNeedClear, pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
-		//if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
-		//	glog.Errorf("Failed to delete extra chaos: %v", err)
-		//}
+		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
+			glog.Errorf("Failed to delete extra chaos: %v", err)
+		}
 
 		//elapsed:=time.Since(now)
 		//glog.Infof("iteration time used: %v",elapsed)
