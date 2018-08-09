@@ -58,7 +58,7 @@ func main() {
 	}
 
 	if endpoint == "" {
-		endpoint = flow.GetMasterIP(clientset)
+		endpoint = flow.GetMasterIP(clientset) + ":6666"
 	}
 	hostname, _ := os.Hostname()
 	// Init ifb module
