@@ -87,16 +87,16 @@ func main() {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
 
+			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
+			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
+			ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
+
 			if !ingressNeedUpdate && !egressNeedUpdate {
 				//glog.Infof("pod %s's setting has deployed, skip", pod.Name)
 				continue
 			}
 
 			ingressNeedClear, egressNeedClear := flow.GetClearFlag(pod.Annotations)
-
-			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
-			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
-			ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
 
 			// Get pod's veth interface name
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, masterIP)
