@@ -23,14 +23,16 @@ type Shaper interface {
 	ClearIngressInterface() error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
 	ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error
+	// Reconcile the mirroring from the interface to ifb
+	ReconcileIngressMirroring(cidr string) error
 	// Reconcile the interface managed by this shaper with the state on the ground.
 	ReconcileEgressInterface(egressChaosInfo ChaosInfo) error
 	// Clear the egress interface
 	ClearEgressInterface() error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
 	ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error
-
-	ReconcileMirroring(ifb string, cidr string) error
+	// Reconcile the mirroring from the interface to ifb
+	ReconcileEgressMirroring(cidr string) error
 
 	ExecTcChaos(isIngress bool, info ChaosInfo) error
 }

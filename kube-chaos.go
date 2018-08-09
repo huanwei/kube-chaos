@@ -105,8 +105,11 @@ func main() {
 			if shaperMap[workload.Spec.InterfaceName] == nil {
 				shaper = flow.NewTCShaper(workload.Spec.InterfaceName)
 				shaperMap[workload.Spec.InterfaceName] = shaper
-				if err := shaper.ReconcileMirroring("ifb0", cidr); err != nil {
-					glog.Errorf("Failed to mirror veth(%s): %v", workload.Spec.InterfaceName, err)
+				if err := shaper.ReconcileEgressMirroring(cidr); err != nil {
+					glog.Errorf("Failed to mirror veth(%s) to ifb0: %v", workload.Spec.InterfaceName, err)
+				}
+				if err := shaper.ReconcileIngressMirroring(cidr); err != nil {
+					glog.Errorf("Failed to mirror veth(%s) to ifb1: %v", workload.Spec.InterfaceName, err)
 				}
 			} else {
 				shaper = shaperMap[workload.Spec.InterfaceName]
