@@ -19,8 +19,9 @@ kube-chaos是一个kubernetes平台的故障注入组件，使用iproute2实现�
 
 配置网卡的方案具体为：
 
-* 对于Pod的ingress流量，直接在Pod所属的虚拟网卡Calicoxxxxxxxxxxx上的egress采用Netem队列进行模拟；
-* 对于Pod的egress流量，转发到Node的IFB网卡，在IFB网卡中针对各个Pod分类，在子类中挂载Netem队列，再发送到Pod所属的虚拟网卡，实现对各个Pod的egress流量的分别控制。
+* 对于Pod的egress流量，进入Pod所属的虚拟网卡Calixxxxxxxxxxx上的ingress，在这里将其转发到Node的IFB0网卡，对IFB0配置规则进行处理后发回；
+* 对于Pod的ingress流量，来自Pod所属的虚拟网卡Calixxxxxxxxxxx上的egress，在这里将其转发到Node的IFB1网卡，对IFB1配置规则进行处理后发回；
+* 在IFB网卡中针对各个Pod分类，将流量导到对应子类，在子类上挂载Netem队列，再发送回原处，实现对各个Pod的流量的分别控制。
 
 ### 网卡设置示意图
 ![](img/interface.png)
