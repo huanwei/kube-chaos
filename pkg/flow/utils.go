@@ -52,11 +52,32 @@ type ChaosInfo struct {
 }
 
 // Change chaos-done flag to yes
-func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
-	newAnnotations = podAnnotations
-	newAnnotations["kubernetes.io/done-ingress-chaos"] = "yes"
-	newAnnotations["kubernetes.io/done-egress-chaos"] = "yes"
-	return newAnnotations
+func SetPodChaosUpdated(ingressNeedUpdate,egressNeedUpdate,ingressNeedClear, egressNeedClear bool, podAnnotations map[string]string) (newAnnotations map[string]string) {
+	if ingressNeedUpdate{
+		podAnnotations["kubernetes.io/done-ingress-chaos"] = "yes"
+	}
+	if egressNeedUpdate{
+		podAnnotations["kubernetes.io/done-egress-chaos"] = "yes"
+	}
+
+	if ingressNeedClear {
+		delete(podAnnotations,"kubernetes.io/clear-ingress-chaos")
+		delete(podAnnotations,"kubernetes.io/done-ingress-chaos")
+		delete(podAnnotations,"kubernetes.io/ingress-chaos")
+	}
+	if egressNeedClear {
+		delete(podAnnotations,"kubernetes.io/clear-egress-chaos")
+		delete(podAnnotations,"kubernetes.io/done-egress-chaos")
+		delete(podAnnotations,"kubernetes.io/egress-chaos")
+	}
+	return podAnnotations
+}
+
+func GetClearFlag(podAnnotations map[string]string) (ingressNeedClear, egressNeedClear bool) {
+	_, ingressNeedClear = podAnnotations["kubernetes.io/clear-ingress-chaos"]
+	_, egressNeedClear = podAnnotations["kubernetes.io/clear-egress-chaos"]
+
+	return ingressNeedClear, egressNeedClear
 }
 
 // Extract Chaos settings from pod's annotation

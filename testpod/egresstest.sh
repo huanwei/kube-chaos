@@ -38,3 +38,6 @@ echo " ">> /tmp/test_output.txt
 kubectl annotate pod $1 kubernetes.io/egress-chaos="{\"Delay\":{\"Set\":\"yes\",\"Time\":\"200ms\",\"Variation\":\"50ms\"},\"Rate\":\"100kbps\"}" kubernetes.io/done-egress-chaos=no --overwrite
 sleep 2
 ping $2 -c 20 -i 0.01 -w 1 >>/tmp/test_output.txt
+
+echo "Clear egress chaos">> /tmp/test_output.txt
+kubectl annotate pod $1 kubernetes.io/clear-egress-chaos= kubernetes.io/done-egress-chaos=no --overwrite
