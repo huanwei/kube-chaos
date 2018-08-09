@@ -37,17 +37,17 @@ import (
 // Uses the hierarchical token bucket queuing discipline (htb), this requires Linux 2.4.20 or newer
 // or a custom kernel with that queuing discipline backported.
 type tcShaper struct {
-	e       exec.Interface
-	iface   string
-	egressClassid int
+	e              exec.Interface
+	iface          string
+	egressClassid  int
 	ingressClassid int
 }
 
 func NewTCShaper(iface string) Shaper {
 	shaper := &tcShaper{
-		e:       exec.New(),
-		iface:   iface,
-		egressClassid: -1,
+		e:              exec.New(),
+		iface:          iface,
+		egressClassid:  -1,
 		ingressClassid: -1,
 	}
 	return shaper
