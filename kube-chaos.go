@@ -153,13 +153,13 @@ func main() {
 			}
 
 			// Update chaos-done flag
-			pod.SetAnnotations(flow.SetPodChaosUpdated(ingressNeedUpdate,egressNeedUpdate,ingressNeedClear, egressNeedClear, pod.Annotations))
+			pod.SetAnnotations(flow.SetPodChaosUpdated(ingressNeedUpdate, egressNeedUpdate, ingressNeedClear, egressNeedClear, pod.Annotations))
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
-		//if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
-		//	glog.Errorf("Failed to delete extra chaos: %v", err)
-		//}
+		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
+			glog.Errorf("Failed to delete extra chaos: %v", err)
+		}
 
 		//elapsed:=time.Since(now)
 		//glog.Infof("iteration time used: %v",elapsed)
