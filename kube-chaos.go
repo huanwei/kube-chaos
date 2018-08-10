@@ -39,7 +39,7 @@ func main() {
 		syncDuration  int
 		shaper        flow.Shaper
 	)
-	shaperMap := map[string]flow.Shaper{}
+
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
 	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
@@ -103,20 +103,15 @@ func main() {
 			// Get pod's veth interface name
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 
-			// Get shaper from the map
-			if shaperMap[workload.Spec.InterfaceName] == nil {
-				shaper = flow.NewTCShaper(workload.Spec.InterfaceName)
-				shaperMap[workload.Spec.InterfaceName] = shaper
-				if err := shaper.ReconcileEgressMirroring(cidr); err != nil {
-					glog.Errorf("Failed to mirror veth(%s) to ifb0: %v", workload.Spec.InterfaceName, err)
-				}
+			// Create a shaper
+			shaper = flow.NewTCShaper(workload.Spec.InterfaceName)
+
+			if ingressNeedUpdate {
+
 				if err := shaper.ReconcileIngressMirroring(cidr); err != nil {
 					glog.Errorf("Failed to mirror veth(%s) to ifb1: %v", workload.Spec.InterfaceName, err)
 				}
-			} else {
-				shaper = shaperMap[workload.Spec.InterfaceName]
-			}
-			if ingressNeedUpdate {
+
 				// First clear interface
 				shaper.ClearIngressInterface()
 
@@ -137,6 +132,10 @@ func main() {
 			}
 
 			if egressNeedUpdate {
+				if err := shaper.ReconcileEgressMirroring(cidr); err != nil {
+					glog.Errorf("Failed to mirror veth(%s) to ifb0: %v", workload.Spec.InterfaceName, err)
+				}
+
 				// First clear interface
 				shaper.ClearEgressInterface()
 
