@@ -454,211 +454,147 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 	return nil
 }
 
-func (t *tcShaper) Rate(isIngress bool, rate string) error {
+func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 	// For test
-	if isIngress {
-		glog.Infof("Adding rate %s to interface: %s", rate, "ifb1")
-		t.changeClass(rate, "ifb1", t.ingressClassid)
-	} else {
-		glog.Infof("Adding rate %s to interface: %s", rate, "ifb0")
-		t.changeClass(rate, "ifb0", t.egressClassid)
-	}
+	glog.Infof("Adding rate %s to interface: %s", rate, ifb)
+	t.changeClass(rate, ifb, classid)
 
 	return nil
 }
 
-func (t *tcShaper) Loss(isIngress bool, percentage, relate string) error {
+func (t *tcShaper) Loss(classid, ifb string, percentage, relate string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
 	e := exec.New()
 
 	// For test
-	if isIngress {
-		glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, "ifb1")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb1", "parent",
-			t.ingressClassid, "netem", "loss", percentage, relate).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Loss added")
-		}
+	glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, ifb)
+	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
+		classid, "netem", "loss", percentage, relate).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
 	} else {
-		glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, "ifb0")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
-			t.egressClassid, "netem", "loss", percentage, relate).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Loss added")
-		}
+		glog.Infof("Loss added")
 	}
 
 	return nil
 }
 
-func (t *tcShaper) Delay(isIngress bool, time, deviation string) error {
+func (t *tcShaper) Delay(classid, ifb string, time, deviation string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
 	//												 basis	devi  devirate
 	e := exec.New()
 
 	// For test
-
-	if isIngress {
-		glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, "ifb1")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb1", "parent",
-			t.ingressClassid, "netem", "delay", time, deviation).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Delay added")
-		}
+	glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, ifb)
+	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
+		classid, "netem", "delay", time, deviation).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
 	} else {
-		glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, "ifb0")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
-			t.egressClassid, "netem", "delay", time, deviation).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Delay added")
-		}
+		glog.Infof("Delay added")
 	}
+
 	return nil
 }
 
-func (t *tcShaper) Duplicate(isIngress bool, percentage string) error {
+func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  duplicate 1%
 	e := exec.New()
 
 	// For test
-	if isIngress {
-		glog.Infof("Adding duplicate %s to interface: %s", percentage, "ifb1")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb1", "parent",
-			t.ingressClassid, "netem", "duplicate", percentage).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s ,\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Duplicate added")
-		}
+	glog.Infof("Adding duplicate %s to interface: %s", percentage, ifb)
+	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
+		classid, "netem", "duplicate", percentage).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s ,\n%s", err, data)
+		return err
 	} else {
-		glog.Infof("Adding duplicate %s to interface: %s", percentage, "ifb0")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
-			t.egressClassid, "netem", "duplicate", percentage).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s ,\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Duplicate added")
-		}
+		glog.Infof("Duplicate added")
 	}
+
 
 	return nil
 }
 
-func (t *tcShaper) Reorder(isIngress bool, time, percentage, relate string) error {
+func (t *tcShaper) Reorder(classid, ifb string, time, percentage, relate string) error {
 	// tc  qdisc  change  dev  eth0  root  netem  delay  10ms   reorder  25%  50%
 	e := exec.New()
 
 	// For test
-	if isIngress {
-		glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, "ifb1")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb1", "parent",
-			t.ingressClassid, "netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s ,\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Reorder added")
-		}
+	glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, ifb)
+	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
+		classid, "netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s ,\n%s", err, data)
+		return err
 	} else {
-		glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, "ifb0")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
-			t.egressClassid, "netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s ,\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Reorder added")
-		}
+		glog.Infof("Reorder added")
 	}
+
 	return nil
 }
 
-func (t *tcShaper) Corrupt(isIngress bool, percentage string) error {
+func (t *tcShaper) Corrupt(classid, ifb string, percentage string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  corrupt  0.2%
 	e := exec.New()
 
 	// For test
-	if isIngress {
-		glog.Infof("Adding corrupt %s to interface: %s", percentage, "ifb1")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb1", "parent",
-			t.ingressClassid, "netem", "corrupt", percentage).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s ,\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Corrupt added")
-		}
+	glog.Infof("Adding corrupt %s to interface: %s", percentage, ifb)
+	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
+		classid, "netem", "corrupt", percentage).CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s ,\n%s", err, data)
+		return err
 	} else {
-		glog.Infof("Adding corrupt %s to interface: %s", percentage, "ifb0")
-		data, err := e.Command("tc", "qdisc", "change", "dev", "ifb0", "parent",
-			t.egressClassid, "netem", "corrupt", percentage).CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s ,\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Corrupt added")
-		}
+		glog.Infof("Corrupt added")
 	}
+
 	return nil
 }
 
-func (t *tcShaper) Clear(isIngress bool, percentage, relate string) error {
+func (t *tcShaper) Clear(classid, ifb string, percentage, relate string) error {
 	e := exec.New()
 	glog.Infof("Deleting HTB in interface: %s", t.iface)
 	// For test
 
-	if isIngress {
-		data, err := e.Command("tc", "qdisc", "del", "dev", "ifb1", "parent",
-			t.ingressClassid, "netem").CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Netem deleted")
-		}
+	data, err := e.Command("tc", "qdisc", "del", "dev", ifb, "parent",
+		classid, "netem").CombinedOutput()
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
 	} else {
-		data, err := e.Command("tc", "qdisc", "del", "dev", "ifb0", "parent",
-			t.egressClassid, "netem").CombinedOutput()
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n%s", err, data)
-			return err
-		} else {
-			glog.Infof("Netem deleted")
-		}
+		glog.Infof("Netem deleted")
 	}
+
 	return nil
 }
 
 func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
-	t.Rate(isIngress, info.Rate)
+	var classid,ifb string
+	if isIngress {
+		classid = t.ingressClassid
+		ifb = "ifb1"
+	} else {
+		classid = t.egressClassid
+		ifb = "ifb0"
+	}
+	t.Rate(classid, ifb, info.Rate)
 	if info.Delay.Set == "yes" {
-		return t.Delay(isIngress, info.Delay.Time, info.Delay.Variation)
+		return t.Delay(classid, ifb, info.Delay.Time, info.Delay.Variation)
 	}
 	if info.Loss.Set == "yes" {
-		return t.Loss(isIngress, info.Loss.Percentage, info.Loss.Relate)
+		return t.Loss(classid, ifb, info.Loss.Percentage, info.Loss.Relate)
 	}
 	if info.Duplicate.Set == "yes" {
-		return t.Duplicate(isIngress, info.Duplicate.Percentage)
+		return t.Duplicate(classid, ifb, info.Duplicate.Percentage)
 	}
 	if info.Reorder.Set == "yes" {
-		return t.Reorder(isIngress, info.Reorder.Time, info.Reorder.Percengtage, info.Reorder.Relate)
+		return t.Reorder(classid, ifb, info.Reorder.Time, info.Reorder.Percengtage, info.Reorder.Relate)
 	}
 	if info.Corrupt.Set == "yes" {
-		return t.Corrupt(isIngress, info.Corrupt.Percentage)
+		return t.Corrupt(classid, ifb, info.Corrupt.Percentage)
 	}
 	return errors.New("No Chaos Info set")
 }
@@ -689,9 +625,6 @@ func reset(cidr, ifb string) error {
 	return nil
 }
 
-func (t *tcShaper) deleteInterface(class, ifb string) error {
-	return t.execAndLog("tc", "qdisc", "delete", "dev", ifb, "root", "handle", class)
-}
 
 func getCIDRs(ifb string) ([]string, error) {
 	e := exec.New()
