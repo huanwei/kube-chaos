@@ -18,6 +18,8 @@ package flow
 
 import (
 	"github.com/huanwei/kube-chaos/pkg/exec"
+	"strings"
+	"github.com/golang/glog"
 )
 
 func InitIfbModule() error {
@@ -25,30 +27,44 @@ func InitIfbModule() error {
 	if _, err := e.Command("modprobe", "ifb").CombinedOutput(); err != nil {
 		return err
 	}
+	glog.Infof("IFB mod up")
 	if _, err := e.Command("ip", "link", "set", "dev", "ifb0", "up").CombinedOutput(); err != nil {
 		return err
 	}
+	glog.Infof("IFB0 up")
 	if _, err := e.Command("ip", "link", "set", "dev", "ifb1", "up").CombinedOutput(); err != nil {
 		return err
 	}
+	glog.Infof("IFB1 up")
 	if err := initIfb("ifb0"); err != nil {
 		return err
 	}
+	glog.Infof("IFB0 inited")
 	if err := initIfb("ifb1"); err != nil {
 		return err
 	}
+	glog.Infof("IFB1 inited")
 	return nil
 }
 
-/*
-[root@localhost ~]# tc qdisc show dev ifb0
-qdisc pfifo_fast 0: root refcnt 2 bands 3 priomap  1 2 2 2 1 2 0 0 1 1 1 1 1 1 1 1
-[root@localhost ~]# tc qdisc add dev ifb0 root handle 1: htb default 30
-[root@localhost ~]# tc qdisc show dev ifb0
-qdisc htb 1: root refcnt 2 r2q 10 default 30 direct_packets_stat 0
-*/
 func initIfb(ifb string) error {
 	e := exec.New()
+
+	// Check whether ifb has been initialized
+	out, err := e.Command("tc", "qdisc", "show","dev", ifb).CombinedOutput();
+	if err != nil {
+		return err
+	}
+
+	outs := strings.Split(string(out), " ")
+	// If already initialized, return
+	if len(outs) >=12  && outs[0] == "qdisc" && outs[1] == "htb" && outs[2] == "1:" && outs[3] == "root" {
+		glog.Infof("%s has already initialized",ifb)
+		return nil
+	}
+
+	glog.Infof("%s not inited, initializing",ifb)
+	// Else reset ifb
 	e.Command("tc", "qdisc", "del", "dev", ifb, "root").CombinedOutput()
 	if _, err := e.Command("tc", "qdisc", "add", "dev", ifb, "root", "handle", "1:", "htb", "default", "0").CombinedOutput(); err != nil {
 		return err
