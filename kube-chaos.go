@@ -33,15 +33,15 @@ import (
 
 func main() {
 	var (
-		kubeconfig string
-		//endpoint      string
+		kubeconfig    string
+		endpoint      string
 		labelSelector string
 		syncDuration  int
 		shaper        flow.Shaper
 	)
 
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
-	//flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
+	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
 	flag.IntVar(&syncDuration, "syncDuration", 1, "sync duration(seconds)")
 	flag.Parse()
@@ -57,7 +57,9 @@ func main() {
 		panic(err.Error())
 	}
 
-	masterIP := flow.GetMasterIP(clientset)
+	if endpoint == "" {
+		endpoint = flow.GetMasterIP(clientset) + ":6666"
+	}
 	hostname, _ := os.Hostname()
 	// Init ifb module
 	err = flow.InitIfbModule()
@@ -99,7 +101,7 @@ func main() {
 			ingressNeedClear, egressNeedClear := flow.GetClearFlag(pod.Annotations)
 
 			// Get pod's veth interface name
-			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, masterIP)
+			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 
 			// Create a shaper
 			shaper = flow.NewTCShaper(workload.Spec.InterfaceName)
