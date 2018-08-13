@@ -111,7 +111,13 @@ func main() {
 				// Delete Pod flag
 				pod.SetAnnotations(flow.SetPodChaosUpdated(false, false, true, true, pod.Annotations))
 				clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
+
+				glog.Infof("Pod %s cleared",pod.Name)
 			}
+
+			// Force update log
+			glog.Infof("Closing complete")
+			glog.Flush()
 
 			// Clear Node's annotation and label
 			annotations:=node.Annotations
