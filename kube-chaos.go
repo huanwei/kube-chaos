@@ -108,9 +108,13 @@ func main() {
 				// Get network card name
 				workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 				// Clear network card settings
-				err=flow.ClearMirroring(workload.Spec.InterfaceName)
+				err=flow.ClearIngressMirroring(workload.Spec.InterfaceName)
 				if err!=nil{
-					glog.Errorf("Fail to clear pod %s's settings: %s",pod.Name,err)
+					glog.Errorf("Fail to clear pod %s's ingress settings: %s",pod.Name,err)
+				}
+				err=flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+				if err!=nil{
+					glog.Errorf("Fail to clear pod %s's egress settings: %s",pod.Name,err)
 				}
 				// Delete Pod flag
 				pod.SetAnnotations(flow.SetPodChaosUpdated(false, false, true, true, pod.Annotations))
@@ -185,6 +189,11 @@ func main() {
 
 					// Execute tc command in ingress
 					shaper.ExecTcChaos(true, ingressChaosInfo)
+				} else {
+					// Clear ingress mirroring
+					flow.ClearIngressMirroring(workload.Spec.InterfaceName)
+					// Clear ingress ifb class
+					flow.Reset(cidr,fmt.Sprintf("ifb%d",firstIFB))
 				}
 			}
 
@@ -209,6 +218,11 @@ func main() {
 
 					// Execute tc command in egress
 					shaper.ExecTcChaos(false, egressChaosInfo)
+				} else {
+					// Clear egress mirroring
+					flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+					// Clear egress ifb class
+					flow.Reset(cidr,fmt.Sprintf("ifb%d",secondIFB))
 				}
 
 			}
