@@ -38,6 +38,7 @@ func main() {
 		endpoint      string
 		labelSelector string
 		firstIFB      int
+		secondIFB     int
 		syncDuration  int
 		shaper        flow.Shaper
 	)
@@ -45,7 +46,8 @@ func main() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
 	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
-	flag.IntVar(&firstIFB, "firstIFB", 0, "first available ifb, e.g. if ifb0 and ifb1 are used, set it to 2")
+	flag.IntVar(&firstIFB, "firstIFB", 0, "first available ifb, default 0 e.g. 2")
+	flag.IntVar(&secondIFB, "secondIFB", 1, "second available ifb, default 1 e.g. 4")
 	flag.IntVar(&syncDuration, "syncDuration", 1, "sync duration(seconds)")
 	flag.Parse()
 
@@ -66,7 +68,7 @@ func main() {
 	}
 	hostname, _ := os.Hostname()
 	// Init ifb module
-	err = flow.InitIfbModule(firstIFB)
+	err = flow.InitIfbModule(firstIFB,secondIFB)
 	if err != nil {
 		glog.Errorf("Failed init ifb: %v", err)
 	}
@@ -95,7 +97,7 @@ func main() {
 		_, clearNode := node.Annotations["kubernetes.io/clear-chaos"]
 		if clearNode {
 			glog.Info("Closing chaos...")
-			err := flow.ClearIfb(firstIFB)
+			err := flow.ClearIfb(firstIFB,secondIFB)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -157,7 +159,7 @@ func main() {
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 
 			// Create a shaper
-			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB)
+			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB,secondIFB)
 
 			if ingressNeedUpdate {
 
@@ -214,7 +216,7 @@ func main() {
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
-		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB); err != nil {
+		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB,secondIFB); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}
 

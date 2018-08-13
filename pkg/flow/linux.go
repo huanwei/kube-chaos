@@ -45,12 +45,12 @@ type tcShaper struct {
 	egressClassid  string
 }
 
-func NewTCShaper(iface string, FirstIFB int) Shaper {
+func NewTCShaper(iface string, firstIFB,secondIFB int) Shaper {
 	shaper := &tcShaper{
 		e:         exec.New(),
 		iface:     iface,
-		FirstIFB:  fmt.Sprintf("ifb%c", FirstIFB+'0'),
-		SecondIFB: fmt.Sprintf("ifb%c", FirstIFB+'1'),
+		FirstIFB:  fmt.Sprintf("ifb%d", firstIFB),
+		SecondIFB: fmt.Sprintf("ifb%d", secondIFB),
 	}
 	return shaper
 }
@@ -307,12 +307,12 @@ func ClearMirroring(iface string) error {
 
 	_,err:=e.Command("tc","qdisc","del","dev",iface,"root").CombinedOutput()
 	if err!=nil{
-		errors.New(fmt.Sprintf("fail to delete %s's root qdisc",iface))
+		return errors.New(fmt.Sprintf("fail to delete %s's root qdisc",iface))
 	}
 
 	_,err=e.Command("tc","qdisc","del","dev",iface,"ingress").CombinedOutput()
 	if err!=nil{
-		errors.New(fmt.Sprintf("fail to delete %s's ingress qdisc",iface))
+		return errors.New(fmt.Sprintf("fail to delete %s's ingress qdisc",iface))
 	}
 
 	return nil
@@ -733,10 +733,10 @@ func getCIDRs(ifb string) ([]string, error) {
 	return result, nil
 }
 
-func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, FirstIFB int) error {
+func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, firstIFB, secondIFB int) error {
 	//delete extra chaos of egress
-	First := fmt.Sprintf("ifb%c", FirstIFB+'0')
-	Second := fmt.Sprintf("ifb%c", FirstIFB+'1')
+	First := fmt.Sprintf("ifb%d", firstIFB)
+	Second := fmt.Sprintf("ifb%d", secondIFB)
 
 	egressCIDRsets := sliceToSets(egressPodsCIDRs)
 	ifb0CIDRs, err := getCIDRs(First)
