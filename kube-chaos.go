@@ -38,6 +38,7 @@ func main() {
 		endpoint      string
 		labelSelector string
 		firstIFB      int
+		secondIFB     int
 		syncDuration  int
 		shaper        flow.Shaper
 	)
@@ -45,7 +46,8 @@ func main() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
 	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
-	flag.IntVar(&firstIFB, "firstIFB", 0, "first available ifb, e.g. if ifb0 and ifb1 are used, set it to 2")
+	flag.IntVar(&firstIFB, "firstIFB", 0, "first available ifb, default 0 e.g. 2")
+	flag.IntVar(&secondIFB, "secondIFB", 1, "second available ifb, default 1 e.g. 4")
 	flag.IntVar(&syncDuration, "syncDuration", 1, "sync duration(seconds)")
 	flag.Parse()
 
@@ -66,10 +68,12 @@ func main() {
 	}
 	hostname, _ := os.Hostname()
 	// Init ifb module
-	err = flow.InitIfbModule(firstIFB)
+	err = flow.InitIfbModule(firstIFB,secondIFB)
 	if err != nil {
 		glog.Errorf("Failed init ifb: %v", err)
 	}
+
+	glog.Flush()
 
 	// Synchronize pods and do chaos
 	for {
@@ -95,7 +99,7 @@ func main() {
 		_, clearNode := node.Annotations["kubernetes.io/clear-chaos"]
 		if clearNode {
 			glog.Info("Closing chaos...")
-			err := flow.ClearIfb(firstIFB)
+			err := flow.ClearIfb(firstIFB,secondIFB)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -104,9 +108,13 @@ func main() {
 				// Get network card name
 				workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 				// Clear network card settings
-				err=flow.ClearMirroring(workload.Spec.InterfaceName)
+				err=flow.ClearIngressMirroring(workload.Spec.InterfaceName)
 				if err!=nil{
-					glog.Errorf("Fail to clear pod %s's settings: %s",pod.Name,err)
+					glog.Errorf("Fail to clear pod %s's ingress settings: %s",pod.Name,err)
+				}
+				err=flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+				if err!=nil{
+					glog.Errorf("Fail to clear pod %s's egress settings: %s",pod.Name,err)
 				}
 				// Delete Pod flag
 				pod.SetAnnotations(flow.SetPodChaosUpdated(false, false, true, true, pod.Annotations))
@@ -157,7 +165,7 @@ func main() {
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 
 			// Create a shaper
-			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB)
+			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB,secondIFB)
 
 			if ingressNeedUpdate {
 
@@ -181,6 +189,11 @@ func main() {
 
 					// Execute tc command in ingress
 					shaper.ExecTcChaos(true, ingressChaosInfo)
+				} else {
+					// Clear ingress mirroring
+					flow.ClearIngressMirroring(workload.Spec.InterfaceName)
+					// Clear ingress ifb class
+					flow.Reset(cidr,fmt.Sprintf("ifb%d",firstIFB))
 				}
 			}
 
@@ -205,6 +218,11 @@ func main() {
 
 					// Execute tc command in egress
 					shaper.ExecTcChaos(false, egressChaosInfo)
+				} else {
+					// Clear egress mirroring
+					flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+					// Clear egress ifb class
+					flow.Reset(cidr,fmt.Sprintf("ifb%d",secondIFB))
 				}
 
 			}
@@ -214,13 +232,15 @@ func main() {
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
-		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB); err != nil {
+		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB,secondIFB); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}
 
 		//elapsed:=time.Since(now)
 		//glog.Infof("iteration time used: %v",elapsed)
 
+		// Flush log
+		glog.Flush()
 		// Sleep to avoid high CPU usage
 		time.Sleep(time.Duration(syncDuration) * time.Second)
 	}

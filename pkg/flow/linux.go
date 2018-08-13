@@ -45,12 +45,12 @@ type tcShaper struct {
 	egressClassid  string
 }
 
-func NewTCShaper(iface string, FirstIFB int) Shaper {
+func NewTCShaper(iface string, firstIFB,secondIFB int) Shaper {
 	shaper := &tcShaper{
 		e:         exec.New(),
 		iface:     iface,
-		FirstIFB:  fmt.Sprintf("ifb%c", FirstIFB+'0'),
-		SecondIFB: fmt.Sprintf("ifb%c", FirstIFB+'1'),
+		FirstIFB:  fmt.Sprintf("ifb%d", firstIFB),
+		SecondIFB: fmt.Sprintf("ifb%d", secondIFB),
 	}
 	return shaper
 }
@@ -302,22 +302,27 @@ func (t *tcShaper) ClearEgressInterface() error {
 	return nil
 }
 
-func ClearMirroring(iface string) error {
+func ClearIngressMirroring(iface string) error {
 	e :=exec.New()
 
 	_,err:=e.Command("tc","qdisc","del","dev",iface,"root").CombinedOutput()
 	if err!=nil{
-		errors.New(fmt.Sprintf("fail to delete %s's root qdisc",iface))
-	}
-
-	_,err=e.Command("tc","qdisc","del","dev",iface,"ingress").CombinedOutput()
-	if err!=nil{
-		errors.New(fmt.Sprintf("fail to delete %s's ingress qdisc",iface))
+		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring",iface))
 	}
 
 	return nil
 }
 
+func ClearEgressMirroring(iface string) error {
+	e :=exec.New()
+
+	_,err:=e.Command("tc","qdisc","del","dev",iface,"ingress").CombinedOutput()
+	if err!=nil{
+		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring",iface))
+	}
+
+	return nil
+}
 func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	e := exec.New()
 
@@ -677,7 +682,7 @@ func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
 }
 
 // Remove a bandwidth limit for a particular CIDR on a particular network interface
-func reset(cidr, ifb string) error {
+func Reset(cidr, ifb string) error {
 	e := exec.New()
 	class, handle, found, err := findCIDRClass(cidr, ifb)
 	if err != nil {
@@ -733,10 +738,10 @@ func getCIDRs(ifb string) ([]string, error) {
 	return result, nil
 }
 
-func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, FirstIFB int) error {
+func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, firstIFB, secondIFB int) error {
 	//delete extra chaos of egress
-	First := fmt.Sprintf("ifb%c", FirstIFB+'0')
-	Second := fmt.Sprintf("ifb%c", FirstIFB+'1')
+	First := fmt.Sprintf("ifb%d", firstIFB)
+	Second := fmt.Sprintf("ifb%d", secondIFB)
 
 	egressCIDRsets := sliceToSets(egressPodsCIDRs)
 	ifb0CIDRs, err := getCIDRs(First)
@@ -745,7 +750,7 @@ func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, FirstIFB int) 
 	}
 	for _, ifb0CIDR := range ifb0CIDRs {
 		if !egressCIDRsets.Has(ifb0CIDR) {
-			if err := reset(ifb0CIDR, First); err != nil {
+			if err := Reset(ifb0CIDR, First); err != nil {
 				return err
 			}
 		}
@@ -758,7 +763,7 @@ func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, FirstIFB int) 
 	}
 	for _, ifb1CIDR := range ifb1CIDRs {
 		if !ingressCIDRsets.Has(ifb1CIDR) {
-			if err := reset(ifb1CIDR, Second); err != nil {
+			if err := Reset(ifb1CIDR, Second); err != nil {
 				return err
 			}
 		}

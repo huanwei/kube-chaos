@@ -24,9 +24,9 @@ import (
 	"strings"
 )
 
-func InitIfbModule(FirstIFB int) error {
-	First := fmt.Sprintf("ifb%c", FirstIFB+'0')
-	Second := fmt.Sprintf("ifb%c", FirstIFB+'1')
+func InitIfbModule(firstIFB, secondIFB int) error {
+	First := fmt.Sprintf("ifb%d", firstIFB)
+	Second := fmt.Sprintf("ifb%d", secondIFB)
 	e := exec.New()
 	if _, err := e.Command("modprobe", "ifb").CombinedOutput(); err != nil {
 		return err
@@ -76,17 +76,26 @@ func initIfb(ifb string) error {
 	return nil
 }
 
-func ClearIfb(firstIFB int) error {
+func ClearIfb(firstIFB ,secondIFB int) error {
 	e := exec.New()
 
-	_, err := e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%c", firstIFB+'0'), "root").CombinedOutput()
+	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", firstIFB), "down").CombinedOutput(); err != nil {
+		return err
+	}
+	glog.Infof("IFB%d down", firstIFB)
+	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", secondIFB), "down").CombinedOutput(); err != nil {
+		return err
+	}
+	glog.Infof("IFB%d down", secondIFB)
+
+	_, err := e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%d", firstIFB), "root").CombinedOutput()
 	if err != nil {
 		return errors.New(fmt.Sprintf("fail to delete IFB%d's root qdisc: %s", firstIFB, err))
 	}
 
-	_, err = e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%c", firstIFB+'1'), "root").CombinedOutput()
+	_, err = e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%d", secondIFB), "root").CombinedOutput()
 	if err != nil {
-		return errors.New(fmt.Sprintf("fail to delete IFB%d's root qdisc: %s", firstIFB+1, err))
+		return errors.New(fmt.Sprintf("fail to delete IFB%d's root qdisc: %s", secondIFB, err))
 	}
 
 	return nil
