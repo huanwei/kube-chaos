@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -73,6 +74,12 @@ func main() {
 	// Synchronize pods and do chaos
 	for {
 		//now:=time.Now()
+		// Get current Node
+		node, err := clientset.CoreV1().Nodes().Get(hostname, meta_v1.GetOptions{})
+		if err != nil {
+			glog.Errorf("Failed get node: %v", err)
+		}
+
 		// Only control current node's pods, so select pods using node name
 		pods, err := clientset.CoreV1().Pods("").List(meta_v1.ListOptions{LabelSelector: labelSelector, FieldSelector: "spec.nodeName=" + hostname})
 		if err != nil {
@@ -80,9 +87,52 @@ func main() {
 		}
 		glog.V(4).Infof("There are %d pods need to do chaos in the cluster\n", len(pods.Items))
 
-		// Used for  checking which tc class isn't used, and del it
+		// Used for checking which tc class isn't used, and del it
 		egressPodsCIDRs := []string{}
 		ingressPodsCIDRs := []string{}
+
+		// Check Node's clear flag, if it exists, clear all settings and close
+		_, clearNode := node.Annotations["kubernetes.io/clear-chaos"]
+		if clearNode {
+			glog.Info("Closing chaos...")
+			err := flow.ClearIfb(firstIFB)
+			if err != nil {
+				glog.Error(err)
+			}
+
+			for _, pod := range pods.Items {
+				// Get network card name
+				workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
+				// Clear network card settings
+				err=flow.ClearMirroring(workload.Spec.InterfaceName)
+				if err!=nil{
+					glog.Errorf("Fail to clear pod %s's settings: %s",pod.Name,err)
+				}
+				// Delete Pod flag
+				pod.SetAnnotations(flow.SetPodChaosUpdated(false, false, true, true, pod.Annotations))
+				clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
+
+				glog.Infof("Pod %s cleared",pod.Name)
+			}
+
+			// Force update log
+			glog.Infof("Closing complete")
+			glog.Flush()
+
+			// Clear Node's annotation and label
+			annotations:=node.Annotations
+			delete(annotations,"kubernetes.io/clear-chaos")
+			labels:=node.Labels
+			delete(labels,strings.Split(labelSelector,"=")[0])
+			node.SetAnnotations(annotations)
+			node.SetLabels(labels)
+			clientset.CoreV1().Nodes().UpdateStatus(node.DeepCopy())
+
+			// Wait for terminating
+			for {
+				time.Sleep(time.Duration(syncDuration) * time.Second)
+			}
+		}
 
 		for _, pod := range pods.Items {
 
@@ -107,7 +157,7 @@ func main() {
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 
 			// Create a shaper
-			shaper = flow.NewTCShaper(workload.Spec.InterfaceName,firstIFB)
+			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB)
 
 			if ingressNeedUpdate {
 
@@ -164,7 +214,7 @@ func main() {
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
-		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs,firstIFB); err != nil {
+		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}
 

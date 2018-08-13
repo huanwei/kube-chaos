@@ -12,7 +12,7 @@ kube-chaos是一个kubernetes平台的故障注入组件，使用iproute2实现�
 * **使用方式**
 * **功能与参数说明**
 * **数据结构**
-* **类，接口**
+* **对外接口**
 
 ## 运行方式与原理
 目前kube-chaos的实现是，以Daemonset的方式在每个包含“kube-chaos=on”标签的Node上调度一个以hostnetwork和特权模式启动的Pod，该Pod从集群中找到有chaos标签的Pod，根据它们的Annotation上的参数，对其所属的虚拟网卡进行配置，实现恶劣网络环境的模拟。
@@ -258,11 +258,35 @@ JSON样例：
 
 在kube-chaos完成ingress的恢复后，会将`kubernetes.io/clear-ingress-chaos`,`kubernetes.io/done-ingress-chaos`和`kubernetes.io/ingress-chaos`三个同方向的标志全部清空，egress同理。
 
-## 类与接口
+## 对外接口
+### Label
+label在chaos中起到选择对象的作用，对应用而言，使用label可以选择被注入故障的Pod，对集群而言，使用label可以选择注入故障所用的Node
 
+#### chaos=on
+默认设置中，对Node增加`chaos=on`标签可以使该Node拥有故障注入能力（即该Node上会被调度一个chaosPod），对Pod增加`chaos=on`标签可以使该Pod被chaos注入故障（前提是该Pod所在的Node拥有`chaos=on`标签
 
+同时，标签名可以不是`chaos=on`，这可以通过设置chaos的`labelSelector`参数来改变
 
+### Annotation
+chaos依赖annotation提供参数进行故障注入，以下是可用的annotation列表：
 
+#### kubernets.io/ingress-chaos
+这个参数用于设置Pod入境流量的故障注入参数，参数形式在文档数据结构部分和可注入故障类型中有详细描述，这里不再赘述
+
+#### kubernets.io/egress-chaos
+这个参数用于设置Pod出境流量的故障注入参数
+
+#### kubernets.io/clear-ingress-chaos
+本参数用于清除已经执行的Pod入境流量设置，如需在保持Pod运行状态的同时撤除chaos的故障注入，请设置本参数，chaos将会在一个更新周期内清除原设置并同时清除有关annotation。这项参数不需要设置值，只需要存在该键即可。
+
+#### kubernets.io/clear-egress-chaos
+同上，本参数用于清除已经执行的Pod出境流量设置
+
+#### kubernets.io/done-ingress-chaos
+本参数用于指示chaos进行入境流量故障注入的设置更新，当需要更新设置或清除设置时(包括ingress-chaos和clear-ingress-chaos)，将本参数设为`no`，chaos将会在一个更新周期内执行新的设置并将本参数设置为`yes`
+
+#### kubernets.io/done-ingress-chaos
+同上，本参数用于指示chaos进行出境流量故障注入的设置更新
 
 
 
