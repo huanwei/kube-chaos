@@ -48,7 +48,7 @@ ifb0与ifb1配置完全相同，可自行替换。
 
 `tc qdisc add dev calixxxxxxxxxxx ingress`
 
-### 为calico网卡配置htb分类
+### 在ifb上为calico网卡配置htb分类
 
 获取ifb当前所有分类，找出空闲类号
 
@@ -101,6 +101,10 @@ ifb0与ifb1配置完全相同，可自行替换。
 delay，通过classid获取队列，两个参数分别是延迟时间和延迟时间波动范围
 
 `tc qdisc change dev ifb0 parent 1:X netem delay $time $deviation` 
+
+loss，两个参数分别是丢包率和相关系数
+
+`tc qdsic change dev ifb0 parent 1:X netem duplicate $percentage $relate`
 
 duplicate，参数为重发百分比
 
