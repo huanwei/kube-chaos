@@ -460,41 +460,18 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 		t.egressClassid = class
 	} else {
 
-		// Check if ingress was already added.
-		data, err := e.Command("tc", "qdisc", "show", "dev", t.iface, "ingress").CombinedOutput()
+		// Delete ingress queue.
+		e.Command("tc", "qdisc", "del", "dev", t.iface, "ingress").CombinedOutput()
+
+		// Add qdisc of ingress
+		data, err := e.Command("tc", "qdisc", "add", "dev", t.iface, "ingress").CombinedOutput()
 		if err != nil {
 			glog.Errorf("TC exec error: %s\n%s", err, data)
 			return err
-		}
-		scanner := bufio.NewScanner(bytes.NewBuffer(data))
-		ingressAdded := false
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			// skip empty lines
-			if len(line) == 0 {
-				continue
-			}
-			parts := strings.Split(line, " ")
-			// expected tc line:
-			// qdisc noqueue 0: root refcnt 2
-			// qdisc ingress ffff: parent ffff:fff1 ----------------
-			if parts[1] == "ingress" {
-				ingressAdded = true
-				glog.Infof("Ingress was already added")
-				break
-			}
+		} else {
+			glog.Infof("Ingress added")
 		}
 
-		// Add qdisc of ingress
-		if !ingressAdded {
-			data, err = e.Command("tc", "qdisc", "add", "dev", t.iface, "ingress").CombinedOutput()
-			if err != nil {
-				glog.Errorf("TC exec error: %s\n%s", err, data)
-				return err
-			} else {
-				glog.Infof("Ingress added")
-			}
-		}
 
 		// Mirror the ingress of caliXXX to FirstIFB
 		data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "ffff:", "protocol", "ip",
