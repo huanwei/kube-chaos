@@ -164,19 +164,40 @@ func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err erro
 	return "", "", false, nil
 }
 
-func (t *tcShaper) makeNewClass(rate, ifb string) (int, error) {
-	class, err := t.nextClassID(ifb)
+func (t *tcShaper) classExists(classid, ifb string) (bool, error) {
+	data, err := t.e.Command("tc", "class", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
-		return -1, err
+		return false, err
 	}
+	scanner := bufio.NewScanner(bytes.NewBuffer(data))
+	classFound := false
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// skip empty lines
+		if len(line) == 0 {
+			continue
+		}
+		parts := strings.Split(line, " ")
+		// Expected:
+		// class htb 1:1 root leaf 99f9: prio 0 rate 800000bit ceil 800000bit burst 1600b cburst 1600b
+		if parts[2] == classid {
+			classFound = true
+			glog.Infof("Find class %s at %s was already added", classid, ifb)
+			break
+		}
+	}
+	return classFound, nil
+}
+
+func (t *tcShaper) makeNewClass(rate, ifb string, class int) error {
 	if err := t.execAndLog("tc", "class", "add",
 		"dev", ifb,
 		"parent", "1:",
 		"classid", fmt.Sprintf("1:%d", class),
 		"htb", "rate", rate); err != nil {
-		return -1, err
+		return err
 	}
-	return class, nil
+	return nil
 }
 
 func (t *tcShaper) changeClass(rate, ifb string, classid string) error {
@@ -291,7 +312,29 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 		return err
 	}
 
+	isExist := false
 	if isFind {
+		isExist, err = t.classExists(class, "ifb1")
+		if err != nil {
+			glog.Errorf("Error when checking class id existence: %s", err)
+			return err
+		}
+		if !isExist {
+			// Class not exist but filter was added, delete the useless filter
+			// tc filter del dev ifb1 parent 1:
+			glog.Infof("Deleting useless filter at ifb1")
+			data, err := e.Command("tc", "filter", "del", "dev", "ifb1", "parent",
+				"1:").CombinedOutput()
+			if err != nil {
+				glog.Errorf("TC exec error: %s\n%s", err, data)
+				return err
+			} else {
+				glog.Infof("filter deleted")
+			}
+		}
+	}
+
+	if isFind && isExist {
 		glog.Infof("IFB1 has already been initialized")
 		t.ingressClassid = class
 	} else {
@@ -330,16 +373,6 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 			glog.Infof("pfifo queue added at root")
 		}
 
-		// Create a class at ifb1
-		classid, err := t.makeNewClass(rate, "ifb1")
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n", err)
-			return err
-		} else {
-			t.ingressClassid = fmt.Sprintf("1:%d", classid)
-			glog.Infof("IFB1 class added")
-		}
-
 		// Mirror the egress of caliXXX to ifb1
 		data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "1:", "protocol", "ip",
 			"prio", "1", "u32", "match", "u32", "0", "0", "flowid", "1:1",
@@ -351,6 +384,15 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 			glog.Infof("Egress of %s mirrored to ifb1", t.iface)
 		}
 
+		// Get an unused classid
+		classid, err := t.nextClassID("ifb1")
+		if err != nil {
+			return err
+		} else {
+			t.ingressClassid = fmt.Sprintf("1:%d", classid)
+			glog.Infof("IFB1 get class %s", t.ingressClassid)
+		}
+
 		// Add a filter
 		data, err = e.Command("tc", "filter", "add", "dev", "ifb1", "parent", "1:0", "protocol", "ip",
 			"prio", "1", "u32", "match", "ip", "dst", cidr, "flowid", t.ingressClassid,
@@ -360,6 +402,15 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 			return err
 		} else {
 			glog.Infof("Filter added")
+		}
+
+		// Create a class at ifb1
+		err = t.makeNewClass(rate, "ifb1", classid)
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n", err)
+			return err
+		} else {
+			glog.Infof("IFB1 class added")
 		}
 	}
 
@@ -378,7 +429,29 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 		return err
 	}
 
+	isExist := false
 	if isFind {
+		isExist, err = t.classExists(class, "ifb0")
+		if err != nil {
+			glog.Errorf("Error when checking class id existence: %s", err)
+			return err
+		}
+		if !isExist {
+			// Class not exist but filter was added, delete the useless filter
+			// tc filter del dev ifb0 parent 1:
+			glog.Infof("Deleting useless filter at ifb0")
+			data, err := e.Command("tc", "filter", "del", "dev", "ifb0", "parent",
+				"1:").CombinedOutput()
+			if err != nil {
+				glog.Errorf("TC exec error: %s\n%s", err, data)
+				return err
+			} else {
+				glog.Infof("filter deleted")
+			}
+		}
+	}
+
+	if isFind && isExist {
 		glog.Infof("IFB0 has already been initialized")
 		t.egressClassid = class
 	} else {
@@ -419,16 +492,6 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 			}
 		}
 
-		// Create a class
-		classid, err := t.makeNewClass(rate, "ifb0")
-		if err != nil {
-			glog.Errorf("TC exec error: %s\n", err)
-			return err
-		} else {
-			t.egressClassid = fmt.Sprintf("1:%d", classid)
-			glog.Infof("IFB0 class added")
-		}
-
 		// Mirror the ingress of caliXXX to ifb0
 		data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "ffff:", "protocol", "ip",
 			"prio", "1", "u32", "match", "u32", "0", "0", "flowid", "1:1",
@@ -440,6 +503,15 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 			glog.Infof("Ingress of %s mirrored to ifb0", t.iface)
 		}
 
+		// Get an unused classid
+		classid, err := t.nextClassID("ifb0")
+		if err != nil {
+			return err
+		} else {
+			t.egressClassid = fmt.Sprintf("1:%d", classid)
+			glog.Infof("IFB0 get class %s", t.egressClassid)
+		}
+
 		// Add a filter
 		data, err = e.Command("tc", "filter", "add", "dev", "ifb0", "parent", "1:0", "protocol", "ip",
 			"prio", "1", "u32", "match", "ip", "src", cidr, "flowid", t.egressClassid,
@@ -449,6 +521,15 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 			return err
 		} else {
 			glog.Infof("Filter added")
+		}
+
+		// Create a class
+		err = t.makeNewClass(rate, "ifb0", classid)
+		if err != nil {
+			glog.Errorf("TC exec error: %s\n", err)
+			return err
+		} else {
+			glog.Infof("IFB0 class added")
 		}
 	}
 	return nil
@@ -514,7 +595,6 @@ func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
 		glog.Infof("Duplicate added")
 	}
 
-
 	return nil
 }
 
@@ -572,7 +652,7 @@ func (t *tcShaper) Clear(classid, ifb string, percentage, relate string) error {
 }
 
 func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
-	var classid,ifb string
+	var classid, ifb string
 	if isIngress {
 		classid = t.ingressClassid
 		ifb = "ifb1"
@@ -624,7 +704,6 @@ func reset(cidr, ifb string) error {
 	}
 	return nil
 }
-
 
 func getCIDRs(ifb string) ([]string, error) {
 	e := exec.New()
