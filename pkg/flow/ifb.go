@@ -20,30 +20,33 @@ import (
 	"github.com/huanwei/kube-chaos/pkg/exec"
 	"strings"
 	"github.com/golang/glog"
+	"fmt"
 )
 
-func InitIfbModule() error {
+func InitIfbModule(FirstIFB int) error {
+	First:=fmt.Sprintf("ifb%c",FirstIFB+'0')
+	Second:=fmt.Sprintf("ifb%c",FirstIFB+'1')
 	e := exec.New()
 	if _, err := e.Command("modprobe", "ifb").CombinedOutput(); err != nil {
 		return err
 	}
 	glog.Infof("IFB mod up")
-	if _, err := e.Command("ip", "link", "set", "dev", "ifb0", "up").CombinedOutput(); err != nil {
+	if _, err := e.Command("ip", "link", "set", "dev", First, "up").CombinedOutput(); err != nil {
 		return err
 	}
-	glog.Infof("IFB0 up")
-	if _, err := e.Command("ip", "link", "set", "dev", "ifb1", "up").CombinedOutput(); err != nil {
+	glog.Infof("%s up",First)
+	if _, err := e.Command("ip", "link", "set", "dev", Second, "up").CombinedOutput(); err != nil {
 		return err
 	}
-	glog.Infof("IFB1 up")
-	if err := initIfb("ifb0"); err != nil {
+	glog.Infof("%s up",Second)
+	if err := initIfb(First); err != nil {
 		return err
 	}
-	glog.Infof("IFB0 inited")
-	if err := initIfb("ifb1"); err != nil {
+	glog.Infof("%s inited",First)
+	if err := initIfb(Second); err != nil {
 		return err
 	}
-	glog.Infof("IFB1 inited")
+	glog.Infof("%s inited",Second)
 	return nil
 }
 

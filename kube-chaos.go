@@ -36,6 +36,7 @@ func main() {
 		kubeconfig    string
 		endpoint      string
 		labelSelector string
+		firstIFB      int
 		syncDuration  int
 		shaper        flow.Shaper
 	)
@@ -43,8 +44,10 @@ func main() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
 	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
+	flag.IntVar(&firstIFB, "firstIFB", 0, "first available ifb, e.g. if ifb0 and ifb1 are used, set it to 2")
 	flag.IntVar(&syncDuration, "syncDuration", 1, "sync duration(seconds)")
 	flag.Parse()
+
 	// Uses the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
@@ -62,7 +65,7 @@ func main() {
 	}
 	hostname, _ := os.Hostname()
 	// Init ifb module
-	err = flow.InitIfbModule()
+	err = flow.InitIfbModule(firstIFB)
 	if err != nil {
 		glog.Errorf("Failed init ifb: %v", err)
 	}
@@ -104,7 +107,7 @@ func main() {
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 
 			// Create a shaper
-			shaper = flow.NewTCShaper(workload.Spec.InterfaceName)
+			shaper = flow.NewTCShaper(workload.Spec.InterfaceName,firstIFB)
 
 			if ingressNeedUpdate {
 
@@ -161,7 +164,7 @@ func main() {
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
-		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs); err != nil {
+		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs,firstIFB); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}
 
