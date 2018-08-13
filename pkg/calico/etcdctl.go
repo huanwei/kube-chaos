@@ -24,7 +24,7 @@ func GetWorkload(namespace, nodeName, podName, endpoint string) Workload {
 
 	cmd := namespace + "/" + newNodeName + "-k8s-" + newPodName + "-eth0"
 
-	data, err := e.Command("etcdctl", "get", "--endpoints=" + endpoint, "--prefix", "/calico/resources/v3/projectcalico.org/workloadendpoints/"+cmd).CombinedOutput()
+	data, err := e.Command("etcdctl", "get", "--endpoints="+endpoint, "--prefix", "/calico/resources/v3/projectcalico.org/workloadendpoints/"+cmd).CombinedOutput()
 
 	if err != nil {
 		glog.Errorf("Failed fetch pod %s's interface name: %s :%s", podName, err, data)
