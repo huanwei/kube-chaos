@@ -79,6 +79,15 @@ func initIfb(ifb string) error {
 func ClearIfb(firstIFB ,secondIFB int) error {
 	e := exec.New()
 
+	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", firstIFB), "down").CombinedOutput(); err != nil {
+		return err
+	}
+	glog.Infof("IFB%d down", firstIFB)
+	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", secondIFB), "down").CombinedOutput(); err != nil {
+		return err
+	}
+	glog.Infof("IFB%d down", secondIFB)
+
 	_, err := e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%d", firstIFB), "root").CombinedOutput()
 	if err != nil {
 		return errors.New(fmt.Sprintf("fail to delete IFB%d's root qdisc: %s", firstIFB, err))

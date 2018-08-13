@@ -73,6 +73,8 @@ func main() {
 		glog.Errorf("Failed init ifb: %v", err)
 	}
 
+	glog.Flush()
+
 	// Synchronize pods and do chaos
 	for {
 		//now:=time.Now()
@@ -223,6 +225,8 @@ func main() {
 		//elapsed:=time.Since(now)
 		//glog.Infof("iteration time used: %v",elapsed)
 
+		// Flush log
+		glog.Flush()
 		// Sleep to avoid high CPU usage
 		time.Sleep(time.Duration(syncDuration) * time.Second)
 	}
