@@ -302,6 +302,22 @@ func (t *tcShaper) ClearEgressInterface() error {
 	return nil
 }
 
+func ClearMirroring(iface string) error {
+	e :=exec.New()
+
+	_,err:=e.Command("tc","qdisc","del","dev",iface,"root").CombinedOutput()
+	if err!=nil{
+		errors.New(fmt.Sprintf("fail to delete %s's root qdisc",iface))
+	}
+
+	_,err=e.Command("tc","qdisc","del","dev",iface,"ingress").CombinedOutput()
+	if err!=nil{
+		errors.New(fmt.Sprintf("fail to delete %s's ingress qdisc",iface))
+	}
+
+	return nil
+}
+
 func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	e := exec.New()
 
