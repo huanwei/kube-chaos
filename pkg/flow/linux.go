@@ -326,7 +326,7 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 		if !isExist {
 			// Class not exist but filter was added, delete the useless filter
 			// tc filter del dev SecondIFB parent 1:
-			glog.Infof("Deleting useless filter at $s", t.SecondIFB)
+			glog.Infof("Deleting useless filter at %s", t.SecondIFB)
 			data, err := e.Command("tc", "filter", "del", "dev", t.SecondIFB, "parent",
 				"1:").CombinedOutput()
 			if err != nil {
@@ -443,7 +443,7 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 		if !isExist {
 			// Class not exist but filter was added, delete the useless filter
 			// tc filter del dev FirstIFB parent 1:
-			glog.Infof("Deleting useless filter at $s", t.FirstIFB)
+			glog.Infof("Deleting useless filter at %s", t.FirstIFB)
 			data, err := e.Command("tc", "filter", "del", "dev", t.FirstIFB, "parent",
 				"1:").CombinedOutput()
 			if err != nil {
