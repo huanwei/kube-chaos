@@ -197,18 +197,18 @@ func (t *tcShaper) qdiscExists(vethName string) (bool, bool, error) {
 	return rootQdisc, ingressQdisc, nil
 }
 
-func (t *tcShaper) ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileIngressCIDR(cidr string, ingressChaosInfo string) error {
 	glog.V(4).Infof("Shaper CIDR %s with ingressChaosInfo %s", cidr, ingressChaosInfo)
 	return nil
 }
 
-func (t *tcShaper) ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileEgressCIDR(cidr string, egressChaosInfo string) error {
 	glog.V(4).Infof("Shaper CIDR %s with egressChaosInfo %s", cidr, egressChaosInfo)
 	return nil
 }
 
 // Add netem in ingress class
-func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileIngressInterface() error {
 	e := exec.New()
 
 	// For ingress test
@@ -224,7 +224,7 @@ func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
 }
 
 // Add netem in egress class
-func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileEgressInterface() error {
 	e := exec.New()
 
 	// For egress test
@@ -265,6 +265,7 @@ func (t *tcShaper) ClearEgressInterface() error {
 func ClearIngressMirroring(iface string) error {
 	e := exec.New()
 
+	glog.Infof("Clear ingress mirroring")
 	_, err := e.Command("tc", "qdisc", "del", "dev", iface, "root").CombinedOutput()
 	if err != nil {
 		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring", iface))
@@ -277,6 +278,7 @@ func ClearIngressMirroring(iface string) error {
 func ClearEgressMirroring(iface string) error {
 	e := exec.New()
 
+	glog.Infof("Clear egress mirroring")
 	_, err := e.Command("tc", "qdisc", "del", "dev", iface, "ingress").CombinedOutput()
 	if err != nil {
 		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring", iface))
@@ -510,14 +512,17 @@ func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 }
 
 // Emulate packets loss
-func (t *tcShaper) Loss(classid, ifb string, percentage, relate string) error {
+func (t *tcShaper) Loss(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "loss", percentage, relate).CombinedOutput()
+	glog.Infof("Adding loss %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "loss"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
@@ -529,15 +534,18 @@ func (t *tcShaper) Loss(classid, ifb string, percentage, relate string) error {
 }
 
 // Emulate delay
-func (t *tcShaper) Delay(classid, ifb string, time, deviation string) error {
+func (t *tcShaper) Delay(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
 	//												 basis	devi  devirate
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "delay", time, deviation).CombinedOutput()
+	glog.Infof("Adding delay %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "delay"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
@@ -549,14 +557,17 @@ func (t *tcShaper) Delay(classid, ifb string, time, deviation string) error {
 }
 
 // Emulate duplicated packets
-func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
+func (t *tcShaper) Duplicate(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  duplicate 1%
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding duplicate %s to interface: %s", percentage, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "duplicate", percentage).CombinedOutput()
+	glog.Infof("Adding duplicate %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "duplicate"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
@@ -567,33 +578,17 @@ func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
 	return nil
 }
 
-// Emulate packets reordered by random delay
-func (t *tcShaper) Reorder(classid, ifb string, time, percentage, relate string) error {
-	// tc  qdisc  change  dev  eth0  root  netem  delay  10ms   reorder  25%  50%
-	e := exec.New()
-
-	// For test
-	glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s ,\n%s", err, data)
-		return err
-	} else {
-		glog.Infof("Reorder added")
-	}
-
-	return nil
-}
-
-func (t *tcShaper) Corrupt(classid, ifb string, percentage string) error {
+func (t *tcShaper) Corrupt(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  corrupt  0.2%
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding corrupt %s to interface: %s", percentage, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "corrupt", percentage).CombinedOutput()
+	glog.Infof("Adding corrupt %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "corrupt"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
@@ -623,7 +618,10 @@ func (t *tcShaper) Clear(classid, ifb string, percentage, relate string) error {
 }
 
 // Execute chaos settings in ingress or egress from chaosinfo
-func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
+func (t *tcShaper) ExecTcChaos(isIngress bool, info string) error {
+	// Split commands
+	cmds := strings.Split(info, ",")
+
 	var classid, ifb string
 	if isIngress {
 		classid = t.ingressClassid
@@ -632,23 +630,47 @@ func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
 		classid = t.egressClassid
 		ifb = t.FirstIFB
 	}
-	t.Rate(classid, ifb, info.Rate)
-	if info.Delay.Set == "yes" {
-		return t.Delay(classid, ifb, info.Delay.Time, info.Delay.Variation)
+	if info == "" {
+		return errors.New("no chaos info set")
 	}
-	if info.Loss.Set == "yes" {
-		return t.Loss(classid, ifb, info.Loss.Percentage, info.Loss.Relate)
+
+	if cmds[0] == "" {
+		cmds[0] = "4gbps"
 	}
-	if info.Duplicate.Set == "yes" {
-		return t.Duplicate(classid, ifb, info.Duplicate.Percentage)
+	err := t.Rate(classid, ifb, cmds[0])
+	if err != nil {
+		return err
 	}
-	if info.Reorder.Set == "yes" {
-		return t.Reorder(classid, ifb, info.Reorder.Time, info.Reorder.Percengtage, info.Reorder.Relate)
+	// If only rate info, clear netem
+	if len(cmds) <= 1 {
+		if isIngress {
+			t.ClearIngressInterface()
+		} else {
+			t.ClearEgressInterface()
+		}
+		return nil
+	} else {
+		switch cmds[1] {
+		case "delay", "Delay", "DELAY":
+			{
+				return t.Delay(classid, ifb, cmds[2:]...)
+			}
+		case "loss", "Loss", "LOSS":
+			{
+				return t.Loss(classid, ifb, cmds[2:]...)
+			}
+		case "duplicate", "Duplicate", "DUPLICATE":
+			{
+				return t.Duplicate(classid, ifb, cmds[2:]...)
+			}
+		case "corrupt", "Corrupt", "CORRUPT":
+			{
+				return t.Corrupt(classid, ifb, cmds[2:]...)
+			}
+		default:
+			return errors.New("wrong chaos settings")
+		}
 	}
-	if info.Corrupt.Set == "yes" {
-		return t.Corrupt(classid, ifb, info.Corrupt.Percentage)
-	}
-	return errors.New("No Chaos Info set")
 }
 
 // Remove a bandwidth limit for a particular CIDR on a particular network interface

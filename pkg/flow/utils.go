@@ -18,7 +18,6 @@ package flow
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/huanwei/kube-chaos/pkg/sets"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +56,7 @@ func GetClearFlag(podAnnotations map[string]string) (ingressNeedClear, egressNee
 }
 
 // Extract Chaos settings from pod's annotation
-func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo ChaosInfo, ingressNeedUpdate, egressNeedUpdate bool, err error) {
+func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, ingressNeedUpdate, egressNeedUpdate bool, err error) {
 	ingressDone, found := podAnnotations["kubernetes.io/done-ingress-chaos"]
 	if (found && ingressDone == "yes") || !found {
 		ingressNeedUpdate = false
@@ -72,15 +71,8 @@ func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, eg
 		egressNeedUpdate = true
 	}
 
-	ingress, found := podAnnotations["kubernetes.io/ingress-chaos"]
-	if found {
-		json.Unmarshal([]byte(ingress), &ingressChaosInfo)
-	}
-
-	egress, found := podAnnotations["kubernetes.io/egress-chaos"]
-	if found {
-		json.Unmarshal([]byte(egress), &egressChaosInfo)
-	}
+	ingressChaosInfo, _ = podAnnotations["kubernetes.io/ingress-chaos"]
+	egressChaosInfo, _ = podAnnotations["kubernetes.io/egress-chaos"]
 
 	return ingressChaosInfo, egressChaosInfo, ingressNeedUpdate, egressNeedUpdate, nil
 }

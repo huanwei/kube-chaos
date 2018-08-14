@@ -143,8 +143,6 @@ func main() {
 		}
 
 		for _, pod := range pods.Items {
-
-			// todo - fix
 			ingressChaosInfo, egressChaosInfo, ingressNeedUpdate, egressNeedUpdate, err := flow.ExtractPodChaosInfo(pod.Annotations)
 			if err != nil {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
@@ -178,7 +176,7 @@ func main() {
 
 				if !ingressNeedClear {
 					// Config pod interface  qdisc
-					if err := shaper.ReconcileIngressInterface(ingressChaosInfo); err != nil {
+					if err := shaper.ReconcileIngressInterface(); err != nil {
 						glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
 					}
 
@@ -207,7 +205,7 @@ func main() {
 
 				if !egressNeedClear {
 					// Config pod interface  qdisc, and mirror to ifb
-					if err := shaper.ReconcileEgressInterface(egressChaosInfo); err != nil {
+					if err := shaper.ReconcileEgressInterface(); err != nil {
 						glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
 					}
 
