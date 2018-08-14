@@ -166,15 +166,14 @@ func main() {
 			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB, secondIFB)
 
 			if ingressNeedUpdate {
-
-				if err := shaper.ReconcileIngressMirroring(cidr); err != nil {
-					glog.Errorf("Failed to mirror veth(%s) to ifb1: %v", workload.Spec.InterfaceName, err)
-				}
-
-				// First clear interface
-				shaper.ClearIngressInterface()
-
 				if !ingressNeedClear {
+					if err := shaper.ReconcileIngressMirroring(cidr); err != nil {
+						glog.Errorf("Failed to mirror veth(%s) to ifb1: %v", workload.Spec.InterfaceName, err)
+					}
+
+					// First clear interface
+					shaper.ClearIngressInterface()
+
 					// Config pod interface  qdisc
 					if err := shaper.ReconcileIngressInterface(); err != nil {
 						glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
@@ -194,7 +193,7 @@ func main() {
 						glog.Errorf("Fail to clear ingress mirroring: %s",err)
 					}
 					// Clear ingress ifb class
-					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", firstIFB))
+					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", secondIFB))
 					if err!=nil{
 						glog.Errorf("Fail to clear ingress ifb class: %s",err)
 					}
@@ -202,14 +201,14 @@ func main() {
 			}
 
 			if egressNeedUpdate {
-				if err := shaper.ReconcileEgressMirroring(cidr); err != nil {
-					glog.Errorf("Failed to mirror veth(%s) to ifb0: %v", workload.Spec.InterfaceName, err)
-				}
-
-				// First clear interface
-				shaper.ClearEgressInterface()
-
 				if !egressNeedClear {
+					if err := shaper.ReconcileEgressMirroring(cidr); err != nil {
+						glog.Errorf("Failed to mirror veth(%s) to ifb0: %v", workload.Spec.InterfaceName, err)
+					}
+
+					// First clear interface
+					shaper.ClearEgressInterface()
+
 					// Config pod interface  qdisc, and mirror to ifb
 					if err := shaper.ReconcileEgressInterface(); err != nil {
 						glog.Errorf("Failed to init veth(%s): %v", workload.Spec.InterfaceName, err)
@@ -229,7 +228,7 @@ func main() {
 						glog.Errorf("Fail to clear egress mirroring: %s",err)
 					}
 					// Clear egress ifb class
-					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", secondIFB))
+					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", firstIFB))
 					if err!=nil{
 						glog.Errorf("Fail to clear egress ifb class: %s",err)
 					}
