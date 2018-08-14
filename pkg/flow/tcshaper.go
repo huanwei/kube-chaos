@@ -21,9 +21,7 @@ package flow
 import (
 	"bufio"
 	"bytes"
-	"encoding/hex"
 	"fmt"
-	"net"
 	"strings"
 
 	"github.com/huanwei/kube-chaos/pkg/exec"
@@ -32,18 +30,6 @@ import (
 	"errors"
 	"github.com/golang/glog"
 )
-
-// tcShaper provides an implementation of the Shaper interface on Linux using the 'tc' tool.
-// Uses the hierarchical token bucket queuing discipline (htb), this requires Linux 2.4.20 or newer
-// or a custom kernel with that queuing discipline backported.
-type tcShaper struct {
-	e              exec.Interface
-	iface          string
-	FirstIFB       string
-	SecondIFB      string
-	ingressClassid string
-	egressClassid  string
-}
 
 func NewTCShaper(iface string, firstIFB,secondIFB int) Shaper {
 	shaper := &tcShaper{
@@ -78,10 +64,7 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 			continue
 		}
 		parts := strings.Split(line, " ")
-		// todo - fix
-		// expected tc line:
-		// class htb 1:1 root prio 0 rate 1000Kbit ceil 1000Kbit burst 1600b cburst 1600b
-		// class htb 1:1 root leaf 2: prio 0 rate 800000Kbit ceil 800000Kbit burst 1600b cburst 1600b
+
 		if len(parts) != 14 && len(parts) != 16 {
 			return -1, fmt.Errorf("unexpected output from tc: %s (%v)", scanner.Text(), parts)
 		}
@@ -96,38 +79,6 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 	}
 	// This should really never happen
 	return -1, fmt.Errorf("exhausted class space, please try again")
-}
-
-// Convert a CIDR from text to a hex representation
-// Strips any masked parts of the IP, so 1.2.3.4/16 becomes hex(1.2.0.0)/ffffffff
-func hexCIDR(cidr string) (string, error) {
-	ip, ipnet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return "", err
-	}
-	ip = ip.Mask(ipnet.Mask)
-	hexIP := hex.EncodeToString([]byte(ip.To4()))
-	hexMask := ipnet.Mask.String()
-	return hexIP + "/" + hexMask, nil
-}
-
-// Convert a CIDR from hex representation to text, opposite of the above.
-func asciiCIDR(cidr string) (string, error) {
-	parts := strings.Split(cidr, "/")
-	if len(parts) != 2 {
-		return "", fmt.Errorf("unexpected CIDR format: %s", cidr)
-	}
-	ipData, err := hex.DecodeString(parts[0])
-	if err != nil {
-		return "", err
-	}
-	ip := net.IP(ipData)
-
-	maskData, err := hex.DecodeString(parts[1])
-	mask := net.IPMask(maskData)
-	size, _ := mask.Size()
-
-	return fmt.Sprintf("%s/%d", ip.String(), size), nil
 }
 
 func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err error) {
@@ -252,6 +203,7 @@ func (t *tcShaper) ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) e
 	return nil
 }
 
+// Add netem in ingress class
 func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
 	e := exec.New()
 
@@ -267,6 +219,7 @@ func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
 	return nil
 }
 
+// Add netem in egress class
 func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
 	e := exec.New()
 
@@ -282,6 +235,7 @@ func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
 	return nil
 }
 
+// Delete netem in ingress class
 func (t *tcShaper) ClearIngressInterface() error {
 	e := exec.New()
 
@@ -292,6 +246,7 @@ func (t *tcShaper) ClearIngressInterface() error {
 	return nil
 }
 
+// Delete netem in egress class
 func (t *tcShaper) ClearEgressInterface() error {
 	e := exec.New()
 
@@ -302,6 +257,7 @@ func (t *tcShaper) ClearEgressInterface() error {
 	return nil
 }
 
+// Delete ingress mirroring
 func ClearIngressMirroring(iface string) error {
 	e :=exec.New()
 
@@ -313,6 +269,7 @@ func ClearIngressMirroring(iface string) error {
 	return nil
 }
 
+// Delete egress mirroring
 func ClearEgressMirroring(iface string) error {
 	e :=exec.New()
 
@@ -323,6 +280,8 @@ func ClearEgressMirroring(iface string) error {
 
 	return nil
 }
+
+// Create ingress mirroring without breaking the existing one
 func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	e := exec.New()
 
@@ -442,6 +401,7 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	return nil
 }
 
+// Create egress mirroring without breaking the existing one
 func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 	e := exec.New()
 
@@ -537,6 +497,7 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 	return nil
 }
 
+// Limit transmission rate
 func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 	// For test
 	glog.Infof("Adding rate %s to interface: %s", rate, ifb)
@@ -545,6 +506,7 @@ func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 	return nil
 }
 
+// Emulate packets loss
 func (t *tcShaper) Loss(classid, ifb string, percentage, relate string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
 	e := exec.New()
@@ -563,6 +525,7 @@ func (t *tcShaper) Loss(classid, ifb string, percentage, relate string) error {
 	return nil
 }
 
+// Emulate delay
 func (t *tcShaper) Delay(classid, ifb string, time, deviation string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
 	//												 basis	devi  devirate
@@ -582,6 +545,7 @@ func (t *tcShaper) Delay(classid, ifb string, time, deviation string) error {
 	return nil
 }
 
+// Emulate duplicated packets
 func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  duplicate 1%
 	e := exec.New()
@@ -600,6 +564,7 @@ func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
 	return nil
 }
 
+// Emulate packets reordered by random delay
 func (t *tcShaper) Reorder(classid, ifb string, time, percentage, relate string) error {
 	// tc  qdisc  change  dev  eth0  root  netem  delay  10ms   reorder  25%  50%
 	e := exec.New()
@@ -636,6 +601,7 @@ func (t *tcShaper) Corrupt(classid, ifb string, percentage string) error {
 	return nil
 }
 
+// Delete netem in the class
 func (t *tcShaper) Clear(classid, ifb string, percentage, relate string) error {
 	e := exec.New()
 	glog.Infof("Deleting HTB in interface: %s", t.iface)
@@ -653,6 +619,7 @@ func (t *tcShaper) Clear(classid, ifb string, percentage, relate string) error {
 	return nil
 }
 
+// Execute chaos settings in ingress or egress from chaosinfo
 func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
 	var classid, ifb string
 	if isIngress {
@@ -707,6 +674,7 @@ func Reset(cidr, ifb string) error {
 	return nil
 }
 
+// Get CIDRs from ifb's filters
 func getCIDRs(ifb string) ([]string, error) {
 	e := exec.New()
 	data, err := e.Command("tc", "filter", "show", "dev", ifb).CombinedOutput()
@@ -738,6 +706,7 @@ func getCIDRs(ifb string) ([]string, error) {
 	return result, nil
 }
 
+// Delete classes in the ifb which is not in the CIDR list
 func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, firstIFB, secondIFB int) error {
 	//delete extra chaos of egress
 	First := fmt.Sprintf("ifb%d", firstIFB)
@@ -769,12 +738,4 @@ func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, firstIFB, seco
 		}
 	}
 	return nil
-}
-
-func sliceToSets(slice []string) sets.String {
-	ss := sets.String{}
-	for _, s := range slice {
-		ss.Insert(s)
-	}
-	return ss
 }
