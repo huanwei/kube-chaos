@@ -266,9 +266,9 @@ func ClearIngressMirroring(iface string) error {
 	e := exec.New()
 
 	glog.Infof("Clear ingress mirroring")
-	_, err := e.Command("tc", "qdisc", "del", "dev", iface, "root").CombinedOutput()
+	out, err := e.Command("tc", "qdisc", "del", "dev", iface, "root").CombinedOutput()
 	if err != nil {
-		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring", iface))
+		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring: %s\n%s", iface,err,out))
 	}
 
 	return nil
@@ -279,9 +279,9 @@ func ClearEgressMirroring(iface string) error {
 	e := exec.New()
 
 	glog.Infof("Clear egress mirroring")
-	_, err := e.Command("tc", "qdisc", "del", "dev", iface, "ingress").CombinedOutput()
+	out, err := e.Command("tc", "qdisc", "del", "dev", iface, "ingress").CombinedOutput()
 	if err != nil {
-		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring", iface))
+		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring: %s\n%s", iface,err,out))
 	}
 
 	return nil

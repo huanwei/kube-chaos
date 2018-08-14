@@ -189,9 +189,15 @@ func main() {
 					shaper.ExecTcChaos(true, ingressChaosInfo)
 				} else {
 					// Clear ingress mirroring
-					flow.ClearIngressMirroring(workload.Spec.InterfaceName)
+					err:=flow.ClearIngressMirroring(workload.Spec.InterfaceName)
+					if err!=nil{
+						glog.Errorf("Fail to clear ingress mirroring: %s",err)
+					}
 					// Clear ingress ifb class
-					flow.Reset(cidr, fmt.Sprintf("ifb%d", firstIFB))
+					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", firstIFB))
+					if err!=nil{
+						glog.Errorf("Fail to clear ingress ifb class: %s",err)
+					}
 				}
 			}
 
@@ -218,9 +224,15 @@ func main() {
 					shaper.ExecTcChaos(false, egressChaosInfo)
 				} else {
 					// Clear egress mirroring
-					flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+					err:=flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+					if err!=nil{
+						glog.Errorf("Fail to clear egress mirroring: %s",err)
+					}
 					// Clear egress ifb class
-					flow.Reset(cidr, fmt.Sprintf("ifb%d", secondIFB))
+					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", secondIFB))
+					if err!=nil{
+						glog.Errorf("Fail to clear egress ifb class: %s",err)
+					}
 				}
 
 			}
