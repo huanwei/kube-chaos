@@ -68,7 +68,7 @@ func main() {
 	}
 	hostname, _ := os.Hostname()
 	// Init ifb module
-	err = flow.InitIfbModule(firstIFB,secondIFB)
+	err = flow.InitIfbModule(firstIFB, secondIFB)
 	if err != nil {
 		glog.Errorf("Failed init ifb: %v", err)
 	}
@@ -99,7 +99,7 @@ func main() {
 		_, clearNode := node.Annotations["kubernetes.io/clear-chaos"]
 		if clearNode {
 			glog.Info("Closing chaos...")
-			err := flow.ClearIfb(firstIFB,secondIFB)
+			err := flow.ClearIfb(firstIFB, secondIFB)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -108,19 +108,19 @@ func main() {
 				// Get network card name
 				workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 				// Clear network card settings
-				err=flow.ClearIngressMirroring(workload.Spec.InterfaceName)
-				if err!=nil{
-					glog.Errorf("Fail to clear pod %s's ingress settings: %s",pod.Name,err)
+				err = flow.ClearIngressMirroring(workload.Spec.InterfaceName)
+				if err != nil {
+					glog.Errorf("Fail to clear pod %s's ingress settings: %s", pod.Name, err)
 				}
-				err=flow.ClearEgressMirroring(workload.Spec.InterfaceName)
-				if err!=nil{
-					glog.Errorf("Fail to clear pod %s's egress settings: %s",pod.Name,err)
+				err = flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+				if err != nil {
+					glog.Errorf("Fail to clear pod %s's egress settings: %s", pod.Name, err)
 				}
 				// Delete Pod flag
 				pod.SetAnnotations(flow.SetPodChaosUpdated(false, false, true, true, pod.Annotations))
 				clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
-				glog.Infof("Pod %s cleared",pod.Name)
+				glog.Infof("Pod %s cleared", pod.Name)
 			}
 
 			// Force update log
@@ -128,10 +128,10 @@ func main() {
 			glog.Flush()
 
 			// Clear Node's annotation and label
-			annotations:=node.Annotations
-			delete(annotations,"kubernetes.io/clear-chaos")
-			labels:=node.Labels
-			delete(labels,strings.Split(labelSelector,"=")[0])
+			annotations := node.Annotations
+			delete(annotations, "kubernetes.io/clear-chaos")
+			labels := node.Labels
+			delete(labels, strings.Split(labelSelector, "=")[0])
 			node.SetAnnotations(annotations)
 			node.SetLabels(labels)
 			clientset.CoreV1().Nodes().UpdateStatus(node.DeepCopy())
@@ -165,7 +165,7 @@ func main() {
 			workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
 
 			// Create a shaper
-			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB,secondIFB)
+			shaper = flow.NewTCShaper(workload.Spec.InterfaceName, firstIFB, secondIFB)
 
 			if ingressNeedUpdate {
 
@@ -193,7 +193,7 @@ func main() {
 					// Clear ingress mirroring
 					flow.ClearIngressMirroring(workload.Spec.InterfaceName)
 					// Clear ingress ifb class
-					flow.Reset(cidr,fmt.Sprintf("ifb%d",firstIFB))
+					flow.Reset(cidr, fmt.Sprintf("ifb%d", firstIFB))
 				}
 			}
 
@@ -222,7 +222,7 @@ func main() {
 					// Clear egress mirroring
 					flow.ClearEgressMirroring(workload.Spec.InterfaceName)
 					// Clear egress ifb class
-					flow.Reset(cidr,fmt.Sprintf("ifb%d",secondIFB))
+					flow.Reset(cidr, fmt.Sprintf("ifb%d", secondIFB))
 				}
 
 			}
@@ -232,7 +232,7 @@ func main() {
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
-		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB,secondIFB); err != nil {
+		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB, secondIFB); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}
 
@@ -244,6 +244,5 @@ func main() {
 		// Sleep to avoid high CPU usage
 		time.Sleep(time.Duration(syncDuration) * time.Second)
 	}
-
 
 }

@@ -17,17 +17,15 @@ limitations under the License.
 package flow
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"github.com/huanwei/kube-chaos/pkg/sets"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"github.com/huanwei/kube-chaos/pkg/sets"
-	"strings"
-	"fmt"
-	"encoding/hex"
 	"net"
+	"strings"
 )
-
-
 
 // Change chaos-done flag to yes
 func SetPodChaosUpdated(ingressNeedUpdate, egressNeedUpdate, ingressNeedClear, egressNeedClear bool, podAnnotations map[string]string) (newAnnotations map[string]string) {
@@ -137,4 +135,3 @@ func hexCIDR(cidr string) (string, error) {
 	hexMask := ipnet.Mask.String()
 	return hexIP + "/" + hexMask, nil
 }
-

@@ -31,7 +31,8 @@ import (
 	"github.com/golang/glog"
 )
 
-func NewTCShaper(iface string, firstIFB,secondIFB int) Shaper {
+// Create a new shaper
+func NewTCShaper(iface string, firstIFB, secondIFB int) Shaper {
 	shaper := &tcShaper{
 		e:         exec.New(),
 		iface:     iface,
@@ -41,6 +42,7 @@ func NewTCShaper(iface string, firstIFB,secondIFB int) Shaper {
 	return shaper
 }
 
+// Execute command and log
 func (t *tcShaper) execAndLog(cmdStr string, args ...string) error {
 	glog.V(4).Infof("Running: %s %s", cmdStr, strings.Join(args, " "))
 	cmd := t.e.Command(cmdStr, args...)
@@ -49,6 +51,7 @@ func (t *tcShaper) execAndLog(cmdStr string, args ...string) error {
 	return err
 }
 
+// Find available class id in ifb
 func (t *tcShaper) nextClassID(ifb string) (int, error) {
 	data, err := t.e.Command("tc", "class", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
@@ -81,6 +84,7 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 	return -1, fmt.Errorf("exhausted class space, please try again")
 }
 
+// Find class using handle
 func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err error) {
 	e := exec.New()
 	data, err := e.Command("tc", "filter", "show", "dev", ifb).CombinedOutput()
@@ -107,9 +111,6 @@ func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err erro
 		}
 		if strings.Contains(line, spec) {
 			parts := strings.Split(filter, " ")
-			//todo - fix
-			// expected tc line:
-			// filter parent 1: protocol ip pref 1 u32 fh 800::800 order 2048 key ht 800 bkt 0 flowid 1:1
 			if len(parts) != 19 {
 				return "", "", false, fmt.Errorf("unexpected output from tc: %s %d (%v)", filter, len(parts), parts)
 			}
@@ -119,6 +120,7 @@ func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err erro
 	return "", "", false, nil
 }
 
+// Check whether the corresponding class exists
 func (t *tcShaper) classExists(classid, ifb string) (bool, error) {
 	data, err := t.e.Command("tc", "class", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
@@ -144,6 +146,7 @@ func (t *tcShaper) classExists(classid, ifb string) (bool, error) {
 	return classFound, nil
 }
 
+// Create a new class in ifb with given class id and rate limitation
 func (t *tcShaper) makeNewClass(rate, ifb string, class int) error {
 	if err := t.execAndLog("tc", "class", "add",
 		"dev", ifb,
@@ -155,6 +158,7 @@ func (t *tcShaper) makeNewClass(rate, ifb string, class int) error {
 	return nil
 }
 
+// Change class of given id in ifb with new rate limitation
 func (t *tcShaper) changeClass(rate, ifb string, classid string) error {
 	if err := t.execAndLog("tc", "class", "change",
 		"dev", ifb,
@@ -259,11 +263,11 @@ func (t *tcShaper) ClearEgressInterface() error {
 
 // Delete ingress mirroring
 func ClearIngressMirroring(iface string) error {
-	e :=exec.New()
+	e := exec.New()
 
-	_,err:=e.Command("tc","qdisc","del","dev",iface,"root").CombinedOutput()
-	if err!=nil{
-		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring",iface))
+	_, err := e.Command("tc", "qdisc", "del", "dev", iface, "root").CombinedOutput()
+	if err != nil {
+		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring", iface))
 	}
 
 	return nil
@@ -271,11 +275,11 @@ func ClearIngressMirroring(iface string) error {
 
 // Delete egress mirroring
 func ClearEgressMirroring(iface string) error {
-	e :=exec.New()
+	e := exec.New()
 
-	_,err:=e.Command("tc","qdisc","del","dev",iface,"ingress").CombinedOutput()
-	if err!=nil{
-		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring",iface))
+	_, err := e.Command("tc", "qdisc", "del", "dev", iface, "ingress").CombinedOutput()
+	if err != nil {
+		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring", iface))
 	}
 
 	return nil
@@ -452,7 +456,6 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 		} else {
 			glog.Infof("Ingress added")
 		}
-
 
 		// Mirror the ingress of caliXXX to FirstIFB
 		data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "ffff:", "protocol", "ip",
