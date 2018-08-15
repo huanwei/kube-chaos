@@ -76,7 +76,7 @@ func initIfb(ifb string) error {
 	return nil
 }
 
-func ClearIfb(firstIFB ,secondIFB int) error {
+func ClearIfb(firstIFB, secondIFB int) error {
 	e := exec.New()
 
 	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", firstIFB), "down").CombinedOutput(); err != nil {

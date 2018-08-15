@@ -21,9 +21,7 @@ package flow
 import (
 	"bufio"
 	"bytes"
-	"encoding/hex"
 	"fmt"
-	"net"
 	"strings"
 
 	"github.com/huanwei/kube-chaos/pkg/exec"
@@ -33,19 +31,8 @@ import (
 	"github.com/golang/glog"
 )
 
-// tcShaper provides an implementation of the Shaper interface on Linux using the 'tc' tool.
-// Uses the hierarchical token bucket queuing discipline (htb), this requires Linux 2.4.20 or newer
-// or a custom kernel with that queuing discipline backported.
-type tcShaper struct {
-	e              exec.Interface
-	iface          string
-	FirstIFB       string
-	SecondIFB      string
-	ingressClassid string
-	egressClassid  string
-}
-
-func NewTCShaper(iface string, firstIFB,secondIFB int) Shaper {
+// Create a new shaper
+func NewTCShaper(iface string, firstIFB, secondIFB int) Shaper {
 	shaper := &tcShaper{
 		e:         exec.New(),
 		iface:     iface,
@@ -55,6 +42,7 @@ func NewTCShaper(iface string, firstIFB,secondIFB int) Shaper {
 	return shaper
 }
 
+// Execute command and log
 func (t *tcShaper) execAndLog(cmdStr string, args ...string) error {
 	glog.V(4).Infof("Running: %s %s", cmdStr, strings.Join(args, " "))
 	cmd := t.e.Command(cmdStr, args...)
@@ -63,6 +51,7 @@ func (t *tcShaper) execAndLog(cmdStr string, args ...string) error {
 	return err
 }
 
+// Find available class id in ifb
 func (t *tcShaper) nextClassID(ifb string) (int, error) {
 	data, err := t.e.Command("tc", "class", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
@@ -78,10 +67,7 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 			continue
 		}
 		parts := strings.Split(line, " ")
-		// todo - fix
-		// expected tc line:
-		// class htb 1:1 root prio 0 rate 1000Kbit ceil 1000Kbit burst 1600b cburst 1600b
-		// class htb 1:1 root leaf 2: prio 0 rate 800000Kbit ceil 800000Kbit burst 1600b cburst 1600b
+
 		if len(parts) != 14 && len(parts) != 16 {
 			return -1, fmt.Errorf("unexpected output from tc: %s (%v)", scanner.Text(), parts)
 		}
@@ -98,38 +84,7 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 	return -1, fmt.Errorf("exhausted class space, please try again")
 }
 
-// Convert a CIDR from text to a hex representation
-// Strips any masked parts of the IP, so 1.2.3.4/16 becomes hex(1.2.0.0)/ffffffff
-func hexCIDR(cidr string) (string, error) {
-	ip, ipnet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return "", err
-	}
-	ip = ip.Mask(ipnet.Mask)
-	hexIP := hex.EncodeToString([]byte(ip.To4()))
-	hexMask := ipnet.Mask.String()
-	return hexIP + "/" + hexMask, nil
-}
-
-// Convert a CIDR from hex representation to text, opposite of the above.
-func asciiCIDR(cidr string) (string, error) {
-	parts := strings.Split(cidr, "/")
-	if len(parts) != 2 {
-		return "", fmt.Errorf("unexpected CIDR format: %s", cidr)
-	}
-	ipData, err := hex.DecodeString(parts[0])
-	if err != nil {
-		return "", err
-	}
-	ip := net.IP(ipData)
-
-	maskData, err := hex.DecodeString(parts[1])
-	mask := net.IPMask(maskData)
-	size, _ := mask.Size()
-
-	return fmt.Sprintf("%s/%d", ip.String(), size), nil
-}
-
+// Find class using handle
 func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err error) {
 	e := exec.New()
 	data, err := e.Command("tc", "filter", "show", "dev", ifb).CombinedOutput()
@@ -156,9 +111,6 @@ func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err erro
 		}
 		if strings.Contains(line, spec) {
 			parts := strings.Split(filter, " ")
-			//todo - fix
-			// expected tc line:
-			// filter parent 1: protocol ip pref 1 u32 fh 800::800 order 2048 key ht 800 bkt 0 flowid 1:1
 			if len(parts) != 19 {
 				return "", "", false, fmt.Errorf("unexpected output from tc: %s %d (%v)", filter, len(parts), parts)
 			}
@@ -168,6 +120,7 @@ func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err erro
 	return "", "", false, nil
 }
 
+// Check whether the corresponding class exists
 func (t *tcShaper) classExists(classid, ifb string) (bool, error) {
 	data, err := t.e.Command("tc", "class", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
@@ -193,6 +146,7 @@ func (t *tcShaper) classExists(classid, ifb string) (bool, error) {
 	return classFound, nil
 }
 
+// Create a new class in ifb with given class id and rate limitation
 func (t *tcShaper) makeNewClass(rate, ifb string, class int) error {
 	if err := t.execAndLog("tc", "class", "add",
 		"dev", ifb,
@@ -204,6 +158,7 @@ func (t *tcShaper) makeNewClass(rate, ifb string, class int) error {
 	return nil
 }
 
+// Change class of given id in ifb with new rate limitation
 func (t *tcShaper) changeClass(rate, ifb string, classid string) error {
 	if err := t.execAndLog("tc", "class", "change",
 		"dev", ifb,
@@ -242,17 +197,18 @@ func (t *tcShaper) qdiscExists(vethName string) (bool, bool, error) {
 	return rootQdisc, ingressQdisc, nil
 }
 
-func (t *tcShaper) ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileIngressCIDR(cidr string, ingressChaosInfo string) error {
 	glog.V(4).Infof("Shaper CIDR %s with ingressChaosInfo %s", cidr, ingressChaosInfo)
 	return nil
 }
 
-func (t *tcShaper) ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error {
+func (t *tcShaper) ReconcileEgressCIDR(cidr string, egressChaosInfo string) error {
 	glog.V(4).Infof("Shaper CIDR %s with egressChaosInfo %s", cidr, egressChaosInfo)
 	return nil
 }
 
-func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
+// Add netem in ingress class
+func (t *tcShaper) ReconcileIngressInterface() error {
 	e := exec.New()
 
 	// For ingress test
@@ -267,7 +223,8 @@ func (t *tcShaper) ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error {
 	return nil
 }
 
-func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
+// Add netem in egress class
+func (t *tcShaper) ReconcileEgressInterface() error {
 	e := exec.New()
 
 	// For egress test
@@ -282,6 +239,7 @@ func (t *tcShaper) ReconcileEgressInterface(egressChaosInfo ChaosInfo) error {
 	return nil
 }
 
+// Delete netem in ingress class
 func (t *tcShaper) ClearIngressInterface() error {
 	e := exec.New()
 
@@ -292,6 +250,7 @@ func (t *tcShaper) ClearIngressInterface() error {
 	return nil
 }
 
+// Delete netem in egress class
 func (t *tcShaper) ClearEgressInterface() error {
 	e := exec.New()
 
@@ -302,27 +261,33 @@ func (t *tcShaper) ClearEgressInterface() error {
 	return nil
 }
 
+// Delete ingress mirroring
 func ClearIngressMirroring(iface string) error {
-	e :=exec.New()
+	e := exec.New()
 
-	_,err:=e.Command("tc","qdisc","del","dev",iface,"root").CombinedOutput()
-	if err!=nil{
-		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring",iface))
+	glog.Infof("Clear ingress mirroring")
+	out, err := e.Command("tc", "qdisc", "del", "dev", iface, "root").CombinedOutput()
+	if err != nil {
+		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring: %s\n%s", iface,err,out))
 	}
 
 	return nil
 }
 
+// Delete egress mirroring
 func ClearEgressMirroring(iface string) error {
-	e :=exec.New()
+	e := exec.New()
 
-	_,err:=e.Command("tc","qdisc","del","dev",iface,"ingress").CombinedOutput()
-	if err!=nil{
-		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring",iface))
+	glog.Infof("Clear egress mirroring")
+	out, err := e.Command("tc", "qdisc", "del", "dev", iface, "ingress").CombinedOutput()
+	if err != nil {
+		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring: %s\n%s", iface,err,out))
 	}
 
 	return nil
 }
+
+// Create ingress mirroring without breaking the existing one
 func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	e := exec.New()
 
@@ -442,6 +407,7 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	return nil
 }
 
+// Create egress mirroring without breaking the existing one
 func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 	e := exec.New()
 
@@ -493,7 +459,6 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 			glog.Infof("Ingress added")
 		}
 
-
 		// Mirror the ingress of caliXXX to FirstIFB
 		data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "ffff:", "protocol", "ip",
 			"prio", "1", "u32", "match", "u32", "0", "0", "flowid", "1:1",
@@ -537,6 +502,7 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 	return nil
 }
 
+// Limit transmission rate
 func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 	// For test
 	glog.Infof("Adding rate %s to interface: %s", rate, ifb)
@@ -545,14 +511,18 @@ func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 	return nil
 }
 
-func (t *tcShaper) Loss(classid, ifb string, percentage, relate string) error {
+// Emulate packets loss
+func (t *tcShaper) Loss(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding loss %s,%s to interface: %s", percentage, relate, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "loss", percentage, relate).CombinedOutput()
+	glog.Infof("Adding loss %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "loss"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
@@ -563,15 +533,19 @@ func (t *tcShaper) Loss(classid, ifb string, percentage, relate string) error {
 	return nil
 }
 
-func (t *tcShaper) Delay(classid, ifb string, time, deviation string) error {
+// Emulate delay
+func (t *tcShaper) Delay(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  delay  100ms  10ms  30%
 	//												 basis	devi  devirate
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding delay %s, %s to interface: %s", time, deviation, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "delay", time, deviation).CombinedOutput()
+	glog.Infof("Adding delay %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "delay"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
 		return err
@@ -582,14 +556,18 @@ func (t *tcShaper) Delay(classid, ifb string, time, deviation string) error {
 	return nil
 }
 
-func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
+// Emulate duplicated packets
+func (t *tcShaper) Duplicate(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  duplicate 1%
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding duplicate %s to interface: %s", percentage, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "duplicate", percentage).CombinedOutput()
+	glog.Infof("Adding duplicate %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "duplicate"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
@@ -600,32 +578,17 @@ func (t *tcShaper) Duplicate(classid, ifb string, percentage string) error {
 	return nil
 }
 
-func (t *tcShaper) Reorder(classid, ifb string, time, percentage, relate string) error {
-	// tc  qdisc  change  dev  eth0  root  netem  delay  10ms   reorder  25%  50%
-	e := exec.New()
-
-	// For test
-	glog.Infof("Adding reorder %s, percent %s, relate %s to interface: %s", time, percentage, relate, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "delay", time, "reorder", percentage, relate).CombinedOutput()
-	if err != nil {
-		glog.Errorf("TC exec error: %s ,\n%s", err, data)
-		return err
-	} else {
-		glog.Infof("Reorder added")
-	}
-
-	return nil
-}
-
-func (t *tcShaper) Corrupt(classid, ifb string, percentage string) error {
+func (t *tcShaper) Corrupt(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  corrupt  0.2%
 	e := exec.New()
 
 	// For test
-	glog.Infof("Adding corrupt %s to interface: %s", percentage, ifb)
-	data, err := e.Command("tc", "qdisc", "change", "dev", ifb, "parent",
-		classid, "netem", "corrupt", percentage).CombinedOutput()
+	glog.Infof("Adding corrupt %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem", "corrupt"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
 	if err != nil {
 		glog.Errorf("TC exec error: %s ,\n%s", err, data)
 		return err
@@ -636,6 +599,7 @@ func (t *tcShaper) Corrupt(classid, ifb string, percentage string) error {
 	return nil
 }
 
+// Delete netem in the class
 func (t *tcShaper) Clear(classid, ifb string, percentage, relate string) error {
 	e := exec.New()
 	glog.Infof("Deleting HTB in interface: %s", t.iface)
@@ -653,7 +617,11 @@ func (t *tcShaper) Clear(classid, ifb string, percentage, relate string) error {
 	return nil
 }
 
-func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
+// Execute chaos settings in ingress or egress from chaosinfo
+func (t *tcShaper) ExecTcChaos(isIngress bool, info string) error {
+	// Split commands
+	cmds := strings.Split(info, ",")
+
 	var classid, ifb string
 	if isIngress {
 		classid = t.ingressClassid
@@ -662,23 +630,47 @@ func (t *tcShaper) ExecTcChaos(isIngress bool, info ChaosInfo) error {
 		classid = t.egressClassid
 		ifb = t.FirstIFB
 	}
-	t.Rate(classid, ifb, info.Rate)
-	if info.Delay.Set == "yes" {
-		return t.Delay(classid, ifb, info.Delay.Time, info.Delay.Variation)
+	if info == "" {
+		return errors.New("no chaos info set")
 	}
-	if info.Loss.Set == "yes" {
-		return t.Loss(classid, ifb, info.Loss.Percentage, info.Loss.Relate)
+
+	if cmds[0] == "" {
+		cmds[0] = "4gbps"
 	}
-	if info.Duplicate.Set == "yes" {
-		return t.Duplicate(classid, ifb, info.Duplicate.Percentage)
+	err := t.Rate(classid, ifb, cmds[0])
+	if err != nil {
+		return err
 	}
-	if info.Reorder.Set == "yes" {
-		return t.Reorder(classid, ifb, info.Reorder.Time, info.Reorder.Percengtage, info.Reorder.Relate)
+	// If only rate info, clear netem
+	if len(cmds) <= 1 {
+		if isIngress {
+			t.ClearIngressInterface()
+		} else {
+			t.ClearEgressInterface()
+		}
+		return nil
+	} else {
+		switch cmds[1] {
+		case "delay", "Delay", "DELAY":
+			{
+				return t.Delay(classid, ifb, cmds[2:]...)
+			}
+		case "loss", "Loss", "LOSS":
+			{
+				return t.Loss(classid, ifb, cmds[2:]...)
+			}
+		case "duplicate", "Duplicate", "DUPLICATE":
+			{
+				return t.Duplicate(classid, ifb, cmds[2:]...)
+			}
+		case "corrupt", "Corrupt", "CORRUPT":
+			{
+				return t.Corrupt(classid, ifb, cmds[2:]...)
+			}
+		default:
+			return errors.New("wrong chaos settings")
+		}
 	}
-	if info.Corrupt.Set == "yes" {
-		return t.Corrupt(classid, ifb, info.Corrupt.Percentage)
-	}
-	return errors.New("No Chaos Info set")
 }
 
 // Remove a bandwidth limit for a particular CIDR on a particular network interface
@@ -707,6 +699,7 @@ func Reset(cidr, ifb string) error {
 	return nil
 }
 
+// Get CIDRs from ifb's filters
 func getCIDRs(ifb string) ([]string, error) {
 	e := exec.New()
 	data, err := e.Command("tc", "filter", "show", "dev", ifb).CombinedOutput()
@@ -738,6 +731,7 @@ func getCIDRs(ifb string) ([]string, error) {
 	return result, nil
 }
 
+// Delete classes in the ifb which is not in the CIDR list
 func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, firstIFB, secondIFB int) error {
 	//delete extra chaos of egress
 	First := fmt.Sprintf("ifb%d", firstIFB)
@@ -769,12 +763,4 @@ func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, firstIFB, seco
 		}
 	}
 	return nil
-}
-
-func sliceToSets(slice []string) sets.String {
-	ss := sets.String{}
-	for _, s := range slice {
-		ss.Insert(s)
-	}
-	return ss
 }
