@@ -33,6 +33,6 @@ type Shaper interface {
 	ReconcileEgressCIDR(cidr string, egressChaosInfo string) error
 	// Reconcile the mirroring from the interface to ifb
 	ReconcileEgressMirroring(cidr string) error
-
+	// Execute tc command on the veth, true for ingress, false for egress
 	ExecTcChaos(isIngress bool, info string) error
 }

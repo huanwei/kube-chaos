@@ -36,8 +36,8 @@ func NewTCShaper(iface string, firstIFB, secondIFB int) Shaper {
 	shaper := &tcShaper{
 		e:         exec.New(),
 		iface:     iface,
-		FirstIFB:  fmt.Sprintf("ifb%d", firstIFB),
-		SecondIFB: fmt.Sprintf("ifb%d", secondIFB),
+		firstIFB:  fmt.Sprintf("ifb%d", firstIFB),
+		secondIFB: fmt.Sprintf("ifb%d", secondIFB),
 	}
 	return shaper
 }
@@ -212,7 +212,7 @@ func (t *tcShaper) ReconcileIngressInterface() error {
 	e := exec.New()
 
 	// For ingress test
-	data, err := e.Command("tc", "qdisc", "add", "dev", t.SecondIFB, "parent",
+	data, err := e.Command("tc", "qdisc", "add", "dev", t.secondIFB, "parent",
 		t.ingressClassid, "netem").CombinedOutput()
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
@@ -228,7 +228,7 @@ func (t *tcShaper) ReconcileEgressInterface() error {
 	e := exec.New()
 
 	// For egress test
-	data, err := e.Command("tc", "qdisc", "add", "dev", t.FirstIFB, "parent",
+	data, err := e.Command("tc", "qdisc", "add", "dev", t.firstIFB, "parent",
 		t.egressClassid, "netem").CombinedOutput()
 	if err != nil {
 		glog.Errorf("TC exec error: %s\n%s", err, data)
@@ -244,7 +244,7 @@ func (t *tcShaper) ClearIngressInterface() error {
 	e := exec.New()
 
 	glog.Infof("Clear ingress interface of class id: " + t.ingressClassid)
-	e.Command("tc", "qdisc", "del", "dev", t.SecondIFB, "parent",
+	e.Command("tc", "qdisc", "del", "dev", t.secondIFB, "parent",
 		t.ingressClassid).CombinedOutput()
 
 	return nil
@@ -255,7 +255,7 @@ func (t *tcShaper) ClearEgressInterface() error {
 	e := exec.New()
 
 	glog.Infof("Clear egress interface of class id: " + t.egressClassid)
-	e.Command("tc", "qdisc", "del", "dev", t.FirstIFB, "parent",
+	e.Command("tc", "qdisc", "del", "dev", t.firstIFB, "parent",
 		t.egressClassid).CombinedOutput()
 
 	return nil
@@ -268,7 +268,7 @@ func ClearIngressMirroring(iface string) error {
 	glog.Infof("Clear ingress mirroring")
 	out, err := e.Command("tc", "qdisc", "del", "dev", iface, "root").CombinedOutput()
 	if err != nil {
-		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring: %s\n%s", iface,err,out))
+		return errors.New(fmt.Sprintf("fail to delete %s's ingress mirroring: %s\n%s", iface, err, out))
 	}
 
 	return nil
@@ -281,7 +281,7 @@ func ClearEgressMirroring(iface string) error {
 	glog.Infof("Clear egress mirroring")
 	out, err := e.Command("tc", "qdisc", "del", "dev", iface, "ingress").CombinedOutput()
 	if err != nil {
-		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring: %s\n%s", iface,err,out))
+		return errors.New(fmt.Sprintf("fail to delete %s's egress mirroring: %s\n%s", iface, err, out))
 	}
 
 	return nil
@@ -296,7 +296,7 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	// Tested queue size
 	size := "1600"
 
-	class, _, isFind, err := findCIDRClass(cidr, t.SecondIFB)
+	class, _, isFind, err := findCIDRClass(cidr, t.secondIFB)
 	if err != nil {
 		glog.Errorf("Error when finding class id: %s", err)
 		return err
@@ -304,7 +304,7 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 
 	isExist := false
 	if isFind {
-		isExist, err = t.classExists(class, t.SecondIFB)
+		isExist, err = t.classExists(class, t.secondIFB)
 		if err != nil {
 			glog.Errorf("Error when checking class id existence: %s", err)
 			return err
@@ -312,8 +312,8 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 		if !isExist {
 			// Class not exist but filter was added, delete the useless filter
 			// tc filter del dev SecondIFB parent 1:
-			glog.Infof("Deleting useless filter at %s", t.SecondIFB)
-			data, err := e.Command("tc", "filter", "del", "dev", t.SecondIFB, "parent",
+			glog.Infof("Deleting useless filter at %s", t.secondIFB)
+			data, err := e.Command("tc", "filter", "del", "dev", t.secondIFB, "parent",
 				"1:").CombinedOutput()
 			if err != nil {
 				glog.Errorf("TC exec error: %s\n%s", err, data)
@@ -325,7 +325,7 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 	}
 
 	if isFind && isExist {
-		glog.Infof("%s has already been initialized", t.SecondIFB)
+		glog.Infof("%s has already been initialized", t.secondIFB)
 		t.ingressClassid = class
 	} else {
 		// Clear the root queue of the interface
@@ -366,25 +366,25 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 		// Mirror the egress of caliXXX to SecondIFB
 		data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "1:", "protocol", "ip",
 			"prio", "1", "u32", "match", "u32", "0", "0", "flowid", "1:1",
-			"action", "mirred", "egress", "redirect", "dev", t.SecondIFB).CombinedOutput()
+			"action", "mirred", "egress", "redirect", "dev", t.secondIFB).CombinedOutput()
 		if err != nil {
 			glog.Errorf("TC exec error: %s\n%s", err, data)
 			return err
 		} else {
-			glog.Infof("Egress of %s mirrored to %s", t.iface, t.SecondIFB)
+			glog.Infof("Egress of %s mirrored to %s", t.iface, t.secondIFB)
 		}
 
 		// Get an unused classid
-		classid, err := t.nextClassID(t.SecondIFB)
+		classid, err := t.nextClassID(t.secondIFB)
 		if err != nil {
 			return err
 		} else {
 			t.ingressClassid = fmt.Sprintf("1:%d", classid)
-			glog.Infof("%s get class %s", t.SecondIFB, t.ingressClassid)
+			glog.Infof("%s get class %s", t.secondIFB, t.ingressClassid)
 		}
 
 		// Add a filter
-		data, err = e.Command("tc", "filter", "add", "dev", t.SecondIFB, "parent", "1:0", "protocol", "ip",
+		data, err = e.Command("tc", "filter", "add", "dev", t.secondIFB, "parent", "1:0", "protocol", "ip",
 			"prio", "1", "u32", "match", "ip", "dst", cidr, "flowid", t.ingressClassid,
 		).CombinedOutput()
 		if err != nil {
@@ -395,12 +395,12 @@ func (t *tcShaper) ReconcileIngressMirroring(cidr string) error {
 		}
 
 		// Create a class at SecondIFB
-		err = t.makeNewClass(rate, t.SecondIFB, classid)
+		err = t.makeNewClass(rate, t.secondIFB, classid)
 		if err != nil {
 			glog.Errorf("TC exec error: %s\n", err)
 			return err
 		} else {
-			glog.Infof("%s class added", t.SecondIFB)
+			glog.Infof("%s class added", t.secondIFB)
 		}
 	}
 
@@ -414,7 +414,7 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 	// Tested highest settable rate on tc
 	rate := "4gbps"
 
-	class, _, isFind, err := findCIDRClass(cidr, t.FirstIFB)
+	class, _, isFind, err := findCIDRClass(cidr, t.firstIFB)
 	if err != nil {
 		glog.Errorf("Error when finding class id: %s", err)
 		return err
@@ -422,7 +422,7 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 
 	isExist := false
 	if isFind {
-		isExist, err = t.classExists(class, t.FirstIFB)
+		isExist, err = t.classExists(class, t.firstIFB)
 		if err != nil {
 			glog.Errorf("Error when checking class id existence: %s", err)
 			return err
@@ -430,8 +430,8 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 		if !isExist {
 			// Class not exist but filter was added, delete the useless filter
 			// tc filter del dev FirstIFB parent 1:
-			glog.Infof("Deleting useless filter at %s", t.FirstIFB)
-			data, err := e.Command("tc", "filter", "del", "dev", t.FirstIFB, "parent",
+			glog.Infof("Deleting useless filter at %s", t.firstIFB)
+			data, err := e.Command("tc", "filter", "del", "dev", t.firstIFB, "parent",
 				"1:").CombinedOutput()
 			if err != nil {
 				glog.Errorf("TC exec error: %s\n%s", err, data)
@@ -443,7 +443,7 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 	}
 
 	if isFind && isExist {
-		glog.Infof("%s has already been initialized", t.FirstIFB)
+		glog.Infof("%s has already been initialized", t.firstIFB)
 		t.egressClassid = class
 	} else {
 
@@ -462,25 +462,25 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 		// Mirror the ingress of caliXXX to FirstIFB
 		data, err = e.Command("tc", "filter", "add", "dev", t.iface, "parent", "ffff:", "protocol", "ip",
 			"prio", "1", "u32", "match", "u32", "0", "0", "flowid", "1:1",
-			"action", "mirred", "egress", "redirect", "dev", t.FirstIFB).CombinedOutput()
+			"action", "mirred", "egress", "redirect", "dev", t.firstIFB).CombinedOutput()
 		if err != nil {
 			glog.Errorf("TC exec error: %s\n%s", err, data)
 			return err
 		} else {
-			glog.Infof("Ingress of %s mirrored to %s", t.iface, t.FirstIFB)
+			glog.Infof("Ingress of %s mirrored to %s", t.iface, t.firstIFB)
 		}
 
 		// Get an unused classid
-		classid, err := t.nextClassID(t.FirstIFB)
+		classid, err := t.nextClassID(t.firstIFB)
 		if err != nil {
 			return err
 		} else {
 			t.egressClassid = fmt.Sprintf("1:%d", classid)
-			glog.Infof("%s get class %s", t.FirstIFB, t.egressClassid)
+			glog.Infof("%s get class %s", t.firstIFB, t.egressClassid)
 		}
 
 		// Add a filter
-		data, err = e.Command("tc", "filter", "add", "dev", t.FirstIFB, "parent", "1:0", "protocol", "ip",
+		data, err = e.Command("tc", "filter", "add", "dev", t.firstIFB, "parent", "1:0", "protocol", "ip",
 			"prio", "1", "u32", "match", "ip", "src", cidr, "flowid", t.egressClassid,
 		).CombinedOutput()
 		if err != nil {
@@ -491,12 +491,12 @@ func (t *tcShaper) ReconcileEgressMirroring(cidr string) error {
 		}
 
 		// Create a class
-		err = t.makeNewClass(rate, t.FirstIFB, classid)
+		err = t.makeNewClass(rate, t.firstIFB, classid)
 		if err != nil {
 			glog.Errorf("TC exec error: %s\n", err)
 			return err
 		} else {
-			glog.Infof("%s class added", t.FirstIFB)
+			glog.Infof("%s class added", t.firstIFB)
 		}
 	}
 	return nil
@@ -625,13 +625,13 @@ func (t *tcShaper) ExecTcChaos(isIngress bool, info string) error {
 	var classid, ifb string
 	if isIngress {
 		classid = t.ingressClassid
-		ifb = t.SecondIFB
+		ifb = t.secondIFB
 	} else {
 		classid = t.egressClassid
-		ifb = t.FirstIFB
+		ifb = t.firstIFB
 	}
 	if info == "" {
-		return errors.New("no chaos info set")
+		return errors.New("No chaos info set")
 	}
 
 	if cmds[0] == "" {
@@ -668,7 +668,7 @@ func (t *tcShaper) ExecTcChaos(isIngress bool, info string) error {
 				return t.Corrupt(classid, ifb, cmds[2:]...)
 			}
 		default:
-			return errors.New("wrong chaos settings")
+			return errors.New("Wrong chaos settings")
 		}
 	}
 }
@@ -734,30 +734,30 @@ func getCIDRs(ifb string) ([]string, error) {
 // Delete classes in the ifb which is not in the CIDR list
 func DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs []string, firstIFB, secondIFB int) error {
 	//delete extra chaos of egress
-	First := fmt.Sprintf("ifb%d", firstIFB)
-	Second := fmt.Sprintf("ifb%d", secondIFB)
+	first := fmt.Sprintf("ifb%d", firstIFB)
+	second := fmt.Sprintf("ifb%d", secondIFB)
 
 	egressCIDRsets := sliceToSets(egressPodsCIDRs)
-	ifb0CIDRs, err := getCIDRs(First)
+	ifb0CIDRs, err := getCIDRs(first)
 	if err != nil {
 		return err
 	}
 	for _, ifb0CIDR := range ifb0CIDRs {
 		if !egressCIDRsets.Has(ifb0CIDR) {
-			if err := Reset(ifb0CIDR, First); err != nil {
+			if err := Reset(ifb0CIDR, first); err != nil {
 				return err
 			}
 		}
 	}
 	//delete extra chaos of ingress
 	ingressCIDRsets := sliceToSets(ingressPodsCIDRs)
-	ifb1CIDRs, err := getCIDRs(Second)
+	ifb1CIDRs, err := getCIDRs(second)
 	if err != nil {
 		return err
 	}
 	for _, ifb1CIDR := range ifb1CIDRs {
 		if !ingressCIDRsets.Has(ifb1CIDR) {
-			if err := Reset(ifb1CIDR, Second); err != nil {
+			if err := Reset(ifb1CIDR, second); err != nil {
 				return err
 			}
 		}
