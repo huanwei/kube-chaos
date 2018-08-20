@@ -50,7 +50,7 @@ kube-chaos使用go语言编写，安装go编译工具后，在项目根目录中
 在项目根目录中有一个Dockerfile，用于建立kube-chaos的容器镜像，我们已经将生成镜像所需的命令编写在脚本文件`autobuild.sh`中，运行`sh autobuild.sh`即可完成镜像的构建。
 
 ### 部署前准备
-kube-chaos通过label识别要控制的Node和Pod，对于Node，需要为想要运行kube-chaos的Node增加`chaos=on`标签，这样kube-chaos才会在该Node上调度出一个执行chaos的Pod，对该Node上的Pod进行故障注入；同样的，对于需要被注入故障的Pod，需要为它们增加`chaos=on`标签（这些工作未来将由一个控制前端针对指定应用自动完成）。
+kube-chaos通过label识别要控制的Node和Pod，对于Node，需要为想要运行kube-chaos的Node增加`chaos=on`标签，这样kube-chaos才会在该Node上调度出一个执行chaos的Pod，对该Node上的Pod进行故障注入；同样的，对于需要被注入故障的Pod，需要为它们增加`chaos=on`标签。
 
 在没有`chaos=on`标签的Node上的Pod，即使Pod有`chaos=on`的标签，它也不会被注入故障；同理，在有`chaos=on`标签的Node上的没有chaos=on标签的Pod也不会被注入故障。
 
@@ -63,11 +63,13 @@ kube-chaos以Daemonset的方式部署，部署配置在项目根目录中的chao
 项目中的testpod目录下有一个autodeploy.sh文件，它包含了该条指令，执行`sh autodeploy.sh`效果相同。
 
 ### 停止故障注入
-如果想要在停止kube-chaos后继续正常运行被注入的Pod，需要首先为这些Pod的annotation中增加`kubernetes.io/clear-ingress-chaos`或`kubernetes.io/clear-egress-chaos` 标签，并等待该标签消失，此时针对该pod的ingress或egress故障注入配置将被清空，在所有被注入的Pod上完成该步骤后，可以将kube-chaos从集群中删除。
+如果想要在停止kube-chaos后继续正常运行被注入的Pod，需要首先为这些Pod的annotation中增加`kubernetes.io/clear-ingress-chaos`或`kubernetes.io/clear-egress-chaos`标记，并等待该标记消失，此时针对该pod的ingress或egress故障注入配置将被清空，在所有被注入的Pod上完成该步骤后，可以将kube-chaos从集群中删除。
 
 如果被注入的Pod也将同时关闭，则不需要上述步骤，直接在集群中删除kube-chaos即可。
 
 在集群中删除kube-chaos，使用：`kubectl delete -f chaos-daemonset.yaml`即可。
+
+如果需要停止特定Node的故障注入，需要为Node的annotation中增加`kubernetes.io/clear-chaos`标记，kube-chaos检测到该标记后会清理Node网络环境并删除Node的`chaos=on`标签，从而使kube-chaos不再在该Node上进行调度。
 
 ## 测试方式
 kube-chaos提供了测试用的镜像和测试所需的脚本，你也可以使用自己的镜像用于测试。
@@ -76,41 +78,42 @@ kube-chaos提供了测试用的镜像和测试所需的脚本，你也可以使�
 
 > 如果要使用kube-chaos提供的测试镜像，使用testpod/目录下的autobuild.sh来创建测试镜像，并使用testpod.yaml来部署测试Pod。
 
-获得测试Pod名和IP后，执行`sh /testpod/ingresstest.sh [Pod名] [PodIP] >/dev/null &`来开启后台运行的自动测试，测试持续约2分钟，执行完毕后在`/tmp/test_output.txt`中查看测试结果。
+获得测试Pod名和IP后，执行`sh /testpod/ingresstest.sh [PodName] [PodIP] >/dev/null &`来开启后台运行的自动测试，测试持续约2分钟，执行完毕后在`/tmp/test_output.txt`中查看测试结果。
 
 测试脚本执行的测试内容为逐个为测试Pod注入各个类型的模拟网络环境，并对该Pod执行Ping来探测网络环境。
 
 测试结果大致如下：
 
 ```
-Kube-chaos TC test
+Kube-chaos TC egress test
+ 
+Loss test: Percentage 50%,Relate 25% Rate limit 100kbps 
+ 
+PING 192.168.102.234 (192.168.102.234) 56(84) bytes of data.
+64 bytes from 192.168.102.234: icmp_seq=1 ttl=63 time=0.377 ms
+64 bytes from 192.168.102.234: icmp_seq=2 ttl=63 time=0.343 ms
+64 bytes from 192.168.102.234: icmp_seq=5 ttl=63 time=0.250 ms
+64 bytes from 192.168.102.234: icmp_seq=6 ttl=63 time=0.316 ms
+64 bytes from 192.168.102.234: icmp_seq=10 ttl=63 time=0.443 ms
+64 bytes from 192.168.102.234: icmp_seq=11 ttl=63 time=0.412 ms
+64 bytes from 192.168.102.234: icmp_seq=17 ttl=63 time=0.451 ms
+64 bytes from 192.168.102.234: icmp_seq=21 ttl=63 time=0.451 ms
+64 bytes from 192.168.102.234: icmp_seq=27 ttl=63 time=0.548 ms
+64 bytes from 192.168.102.234: icmp_seq=28 ttl=63 time=0.464 ms
+64 bytes from 192.168.102.234: icmp_seq=29 ttl=63 time=0.458 ms
+64 bytes from 192.168.102.234: icmp_seq=30 ttl=63 time=0.389 ms
+64 bytes from 192.168.102.234: icmp_seq=31 ttl=63 time=0.402 ms
+64 bytes from 192.168.102.234: icmp_seq=32 ttl=63 time=0.527 ms
+64 bytes from 192.168.102.234: icmp_seq=35 ttl=63 time=0.620 ms
+64 bytes from 192.168.102.234: icmp_seq=40 ttl=63 time=0.442 ms
+64 bytes from 192.168.102.234: icmp_seq=41 ttl=63 time=0.403 ms
+64 bytes from 192.168.102.234: icmp_seq=42 ttl=63 time=0.567 ms
+64 bytes from 192.168.102.234: icmp_seq=44 ttl=63 time=0.686 ms
+64 bytes from 192.168.102.234: icmp_seq=45 ttl=63 time=0.289 ms
 
-Delay test: {Delay:{Set:yes,Time:200ms,Variation:50ms}}
-
-PING 192.168.102.230 (192.168.102.230) 56(84) bytes of data.
-64 bytes from 192.168.102.230: icmp_seq=1 ttl=63 time=214 ms
-64 bytes from 192.168.102.230: icmp_seq=2 ttl=63 time=206 ms
-64 bytes from 192.168.102.230: icmp_seq=3 ttl=63 time=168 ms
-64 bytes from 192.168.102.230: icmp_seq=4 ttl=63 time=216 ms
-64 bytes from 192.168.102.230: icmp_seq=5 ttl=63 time=230 ms
-64 bytes from 192.168.102.230: icmp_seq=6 ttl=63 time=242 ms
-64 bytes from 192.168.102.230: icmp_seq=7 ttl=63 time=153 ms
-64 bytes from 192.168.102.230: icmp_seq=8 ttl=63 time=174 ms
-64 bytes from 192.168.102.230: icmp_seq=9 ttl=63 time=185 ms
-64 bytes from 192.168.102.230: icmp_seq=10 ttl=63 time=240 ms
-
---- 192.168.102.230 ping statistics ---
-10 packets transmitted, 10 received, 0% packet loss, time 8999ms
-rtt min/avg/max/mdev = 153.576/203.375/242.680/29.708 ms
-
-Loss test: {Loss:{Set:yes,Percentage:50%,Relate:25%}}
-
-PING 192.168.102.230 (192.168.102.230) 56(84) bytes of data.
-64 bytes from 192.168.102.230: icmp_seq=10 ttl=63 time=0.346 ms
-
---- 192.168.102.230 ping statistics ---
-10 packets transmitted, 1 received, 90% packet loss, time 8999ms
-rtt min/avg/max/mdev = 0.346/0.346/0.346/0.000 ms
+--- 192.168.102.234 ping statistics ---
+45 packets transmitted, 20 received, 55% packet loss, time 608ms
+rtt min/avg/max/mdev = 0.250/0.441/0.686/0.109 ms
 
 ...
 ```
@@ -120,12 +123,10 @@ rtt min/avg/max/mdev = 0.346/0.346/0.346/0.000 ms
 目前完成的部分是最底层的执行组件，还没有自动执行的策略，因此需要手动用kubectl指定被测试的应用的所有pod的模拟参数，注意在命令行中需要为`"`符号前增加`\`转义符，例如在ingress方向加入延迟：
 
 ```
-kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\",\"Time\":\"200ms\",\"Variation\":\"50ms\"},\"Rate\":\"100kbps\"}" kubernetes.io/done-ingress-chaos=no --overwrite
+kubectl annotate pod $1 kubernetes.io/ingress-chaos="100kbps,delay,100ms,50ms" kubernetes.io/done-ingress-chaos=no --overwrite
 ```
 
 并且要注意的是，要设置kubernetes.io/done-ingress-chaos=no以使设置生效，egress方向的设置类似。
-
-后续我们将开发控制端根据策略自动设置并改变参数，并提供更简洁的接口来设置策略。
 
 ## 功能与参数说明
 ### 输入
@@ -151,9 +152,9 @@ kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\"
 
 ----------------------------
 #### 限速
-参数样例：`{Rate:"10kbps"}`
+参数样例：`10kbps`
 
-效果：限制带宽上限到10KB/s，需要注意的是，这个参数必须设置，并且独立于其他五项参数，这意味着每次故障注入都需要设置限速以及另一项参数,另外，限速的上限为4gbps,不支持更高的限速（由于内核中的限速速率由一个单位为bits/s的32位的无符号整数来储存）。
+效果：限制带宽上限到10KB/s，需要注意的是，限速的上限为4gibps,不支持更高的限速（由于内核中的限速速率由一个单位为bits/s的32位的无符号整数来储存）。
 
 可使用速率单位：
 				
@@ -172,9 +173,9 @@ kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\"
 
 ---
 #### 延迟
-参数样例：`{Delay:{Set:"yes",Time:"100ms",Variation:"10ms"}}`
+参数样例：`,delay,10ms`
 
-效果：产生一个平均为100ms，误差正负10ms的延迟。
+效果：产生一个平均为100ms，误差正负10ms的延迟。注意：参数首部的逗号不能忽略，第一个参数固定为限速速率，速率为空意味着最高速率，可以认为是限速到4gibps
 
 可使用时间单位：
 
@@ -183,71 +184,34 @@ kubectl annotate pod $1 kubernetes.io/ingress-chaos="{\"Delay\":{\"Set\":\"yes\"
 	us, usec, usecs or a bare number	Microseconds.
 ---
 #### 丢包
-参数样例：`{Loss:{Set:"yes",Percentage:"50%",Relate:"25%"}}`
+参数样例：`,loss,50%,25%`
 
 效果：产生50%的丢包几率，并且这个几率受到伪相关系数影响，即`下一次丢包几率=这次是否丢包*25%+50%*(1-25%)`。
 
 ---
 #### 重复
-参数样例：`{Duplicate:{Set:"yes",Percentage:"50%"}}`
+参数样例：`,duplicate,50%`
 
 效果：产生50%的重复包发生率，表现为大约每三个数据包中就有两个是一模一样的数据包。
 
 ---
 #### 乱序
-参数样例：`{Reorder:{Set:"yes",Time:"50ms",Percentage:"50%",Relate:"25%"}}`
+参数样例：`,delay,50ms,reorder,50%,25%`
 
 效果：50%的数据包会产生50ms的延迟，从而导致包的顺序会被打乱，其中50%的几率受到25%的伪相关系数影响。
 
 ---
 #### 损坏
-参数样例：`{Corrupt:{Set:"yes",Percentage:"3%"}}`
+参数样例：`,corrupt,3%`
 
 效果：3%的数据包中会出现数据损坏（即数据被改变）。
 
 ## 数据结构
 ### TC控制参数
-kube-chaos通过Pod上的Annotation进行网络环境模拟的配置，为了将参数能够置于Annotation中的键值对中，chaos使用JSON格式来表示TC控制参数。
+kube-chaos通过Pod上的Annotation进行网络环境模拟的配置。
 
-在Go语言中具体的格式为：
-
-```
-type ChaosInfo struct {
-	Rate  string
-	Delay struct {
-		Set       string
-		Time      string
-		Variation string
-	}
-	Loss struct {
-		Set        string
-		Percentage string
-		Relate     string
-	}
-	Duplicate struct {
-		Set        string
-		Percentage string
-	}
-	Reorder struct {
-		Set         string
-		Time        string
-		Percengtage string
-		Relate      string
-	}
-	Corrupt struct {
-		Set        string
-		Percentage string
-	}
-}
-```
-JSON样例：
-`{Delay:{Set:"yes",Time:"100ms",Deviation:"10ms"},Rate:"100kbps}`(该设置将网卡延迟增加100ms，误差10ms,最高带宽100kbps)。
-
-由于除带宽限制以外只能同时模拟一种网络环境，kube-chaos将自上而下扫描各个字段中的Set是否为`yes`，如果是，则采用该项设置，忽略下方的其他设置。
-
-比如如下参数：
-`{Delay:{Set:"",Time:"100ms",Deviation:"10ms"},Loss:{Set:"yes",Percentage:"50%",Relate:"25%"，Rate:"50%"}`
-会将网卡设置为50%丢包率，相关性25%，带宽限制为最高速率的50%。
+样例：
+`100kbps,delay,100ms,10ms`(该设置将网卡延迟增加100ms，误差10ms,最高带宽100kbps)。
 
 ### 参数更新标志
 由于chaos通过annotation来进行设置，因此需要轮询各个pod的annotation，为此需要设置`kubernetes.io/done-ingress-chaos`或`kubernetes.io/done-egress-chaos`标志来指示设置的状态。

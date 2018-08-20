@@ -511,6 +511,27 @@ func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 	return nil
 }
 
+func (t *tcShaper) Netem(classid, ifb string, args ...string) error {
+	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
+	e := exec.New()
+
+	// For test
+	glog.Infof("Adding netem %v to interface: %s", args, ifb)
+	cmd := []string{"qdisc", "change", "dev", ifb, "parent", classid, "netem"}
+	cmd = append(cmd, args...)
+
+	data, err := e.Command("tc", cmd...).CombinedOutput()
+
+	if err != nil {
+		glog.Errorf("TC exec error: %s\n%s", err, data)
+		return err
+	} else {
+		glog.Infof("Netem added")
+	}
+
+	return nil
+}
+
 // Emulate packets loss
 func (t *tcShaper) Loss(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
@@ -641,36 +662,8 @@ func (t *tcShaper) ExecTcChaos(isIngress bool, info string) error {
 	if err != nil {
 		return err
 	}
-	// If only rate info, clear netem
-	if len(cmds) <= 1 {
-		if isIngress {
-			t.ClearIngressInterface()
-		} else {
-			t.ClearEgressInterface()
-		}
-		return nil
-	} else {
-		switch cmds[1] {
-		case "delay", "Delay", "DELAY":
-			{
-				return t.Delay(classid, ifb, cmds[2:]...)
-			}
-		case "loss", "Loss", "LOSS":
-			{
-				return t.Loss(classid, ifb, cmds[2:]...)
-			}
-		case "duplicate", "Duplicate", "DUPLICATE":
-			{
-				return t.Duplicate(classid, ifb, cmds[2:]...)
-			}
-		case "corrupt", "Corrupt", "CORRUPT":
-			{
-				return t.Corrupt(classid, ifb, cmds[2:]...)
-			}
-		default:
-			return errors.New("wrong chaos settings")
-		}
-	}
+	// Set netem
+	return t.Netem(classid,ifb,cmds[1:]...)
 }
 
 // Remove a bandwidth limit for a particular CIDR on a particular network interface
