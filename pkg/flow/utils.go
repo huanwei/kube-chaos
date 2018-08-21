@@ -17,50 +17,46 @@ limitations under the License.
 package flow
 
 import (
-	"encoding/json"
+	"encoding/hex"
+	"fmt"
+	"github.com/huanwei/kube-chaos/pkg/sets"
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"net"
+	"strings"
 )
 
-// Represent tc chaos information using json encoding
-type ChaosInfo struct {
-	Rate  string
-	Delay struct {
-		Set       string
-		Time      string
-		Variation string
+// Change chaos-done flag to yes
+func SetPodChaosUpdated(ingressNeedUpdate, egressNeedUpdate, ingressNeedClear, egressNeedClear bool, podAnnotations map[string]string) (newAnnotations map[string]string) {
+	if ingressNeedUpdate {
+		podAnnotations["kubernetes.io/done-ingress-chaos"] = "yes"
 	}
-	Loss struct {
-		Set        string
-		Percentage string
-		Relate     string
+	if egressNeedUpdate {
+		podAnnotations["kubernetes.io/done-egress-chaos"] = "yes"
 	}
-	Duplicate struct {
-		Set        string
-		Percentage string
+
+	if ingressNeedClear {
+		delete(podAnnotations, "kubernetes.io/clear-ingress-chaos")
+		delete(podAnnotations, "kubernetes.io/done-ingress-chaos")
+		delete(podAnnotations, "kubernetes.io/ingress-chaos")
 	}
-	Reorder struct {
-		Set         string
-		Time        string
-		Percengtage string
-		Relate      string
+	if egressNeedClear {
+		delete(podAnnotations, "kubernetes.io/clear-egress-chaos")
+		delete(podAnnotations, "kubernetes.io/done-egress-chaos")
+		delete(podAnnotations, "kubernetes.io/egress-chaos")
 	}
-	Corrupt struct {
-		Set        string
-		Percentage string
-	}
+	return podAnnotations
 }
 
-// Change chaos-done flag to yes
-func SetPodChaosUpdated(podAnnotations map[string]string) (newAnnotations map[string]string) {
-	newAnnotations = podAnnotations
-	newAnnotations["kubernetes.io/done-ingress-chaos"] = "yes"
-	newAnnotations["kubernetes.io/done-egress-chaos"] = "yes"
-	return newAnnotations
+func GetClearFlag(podAnnotations map[string]string) (ingressNeedClear, egressNeedClear bool) {
+	_, ingressNeedClear = podAnnotations["kubernetes.io/clear-ingress-chaos"]
+	_, egressNeedClear = podAnnotations["kubernetes.io/clear-egress-chaos"]
+
+	return ingressNeedClear, egressNeedClear
 }
 
 // Extract Chaos settings from pod's annotation
-func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo ChaosInfo, ingressNeedUpdate, egressNeedUpdate bool, err error) {
+func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, egressChaosInfo string, ingressNeedUpdate, egressNeedUpdate bool, err error) {
 	ingressDone, found := podAnnotations["kubernetes.io/done-ingress-chaos"]
 	if (found && ingressDone == "yes") || !found {
 		ingressNeedUpdate = false
@@ -75,15 +71,8 @@ func ExtractPodChaosInfo(podAnnotations map[string]string) (ingressChaosInfo, eg
 		egressNeedUpdate = true
 	}
 
-	ingress, found := podAnnotations["kubernetes.io/ingress-chaos"]
-	if found {
-		json.Unmarshal([]byte(ingress), &ingressChaosInfo)
-	}
-
-	egress, found := podAnnotations["kubernetes.io/egress-chaos"]
-	if found {
-		json.Unmarshal([]byte(egress), &egressChaosInfo)
-	}
+	ingressChaosInfo, _ = podAnnotations["kubernetes.io/ingress-chaos"]
+	egressChaosInfo, _ = podAnnotations["kubernetes.io/egress-chaos"]
 
 	return ingressChaosInfo, egressChaosInfo, ingressNeedUpdate, egressNeedUpdate, nil
 }
@@ -98,4 +87,44 @@ func GetMasterIP(clientset *kubernetes.Clientset) (masterIP string) {
 		}
 	}
 	return masterIP
+}
+
+func sliceToSets(slice []string) sets.String {
+	ss := sets.String{}
+	for _, s := range slice {
+		ss.Insert(s)
+	}
+	return ss
+}
+
+// Convert a CIDR from hex representation to text, opposite of the above.
+func asciiCIDR(cidr string) (string, error) {
+	parts := strings.Split(cidr, "/")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("unexpected CIDR format: %s", cidr)
+	}
+	ipData, err := hex.DecodeString(parts[0])
+	if err != nil {
+		return "", err
+	}
+	ip := net.IP(ipData)
+
+	maskData, err := hex.DecodeString(parts[1])
+	mask := net.IPMask(maskData)
+	size, _ := mask.Size()
+
+	return fmt.Sprintf("%s/%d", ip.String(), size), nil
+}
+
+// Convert a CIDR from text to a hex representation
+// Strips any masked parts of the IP, so 1.2.3.4/16 becomes hex(1.2.0.0)/ffffffff
+func hexCIDR(cidr string) (string, error) {
+	ip, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", err
+	}
+	ip = ip.Mask(ipnet.Mask)
+	hexIP := hex.EncodeToString([]byte(ip.To4()))
+	hexMask := ipnet.Mask.String()
+	return hexIP + "/" + hexMask, nil
 }

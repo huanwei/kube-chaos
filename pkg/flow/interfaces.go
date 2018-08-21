@@ -18,15 +18,21 @@ package flow
 
 type Shaper interface {
 	// Reconcile the interface managed by this shaper with the state on the ground.
-	ReconcileIngressInterface(ingressChaosInfo ChaosInfo) error
+	ReconcileIngressInterface() error
+	// Clear the ingress interface
+	ClearIngressInterface() error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
-	ReconcileIngressCIDR(cidr string, ingressChaosInfo ChaosInfo) error
+	ReconcileIngressCIDR(cidr string, ingressChaosInfo string) error
+	// Reconcile the mirroring from the interface to ifb
+	ReconcileIngressMirroring(cidr string) error
 	// Reconcile the interface managed by this shaper with the state on the ground.
-	ReconcileEgressInterface(egressChaosInfo ChaosInfo) error
+	ReconcileEgressInterface() error
+	// Clear the egress interface
+	ClearEgressInterface() error
 	// Reconcile a CIDR managed by this shaper with the state on the ground
-	ReconcileEgressCIDR(cidr string, egressChaosInfo ChaosInfo) error
-
-	ReconcileMirroring(ifb string, cidr string) error
-
-	ExecTcChaos(isIngress bool, info ChaosInfo) error
+	ReconcileEgressCIDR(cidr string, egressChaosInfo string) error
+	// Reconcile the mirroring from the interface to ifb
+	ReconcileEgressMirroring(cidr string) error
+	// Execute tc command on the veth, true for ingress, false for egress
+	ExecTcChaos(isIngress bool, info string) error
 }
