@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors.
+Copyright 2018 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ func main() {
 	)
 
 	flag.StringVar(&kubeconfig, "kubeconfig", "/etc/kubernetes/kubelet.conf", "absolute path to the kubeconfig file")
-	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, e.g. http://10.96.232.136:6666")
+	flag.StringVar(&endpoint, "etcd-endpoint", "", "the calico etcd endpoint, use standalone etcd cluster, if not set we use the default in-cluster Calico etcd. e.g. http://10.96.232.136:6666")
 	flag.StringVar(&labelSelector, "labelSelector", "chaos=on", "select pods to do chaos, e.g. chaos=on")
 	flag.IntVar(&firstIFB, "firstIFB", 0, "first available ifb, default 0 e.g. 2")
 	flag.IntVar(&secondIFB, "secondIFB", 1, "second available ifb, default 1 e.g. 4")
@@ -202,14 +202,14 @@ func main() {
 					shaper.ExecTcChaos(true, ingressChaosInfo)
 				} else {
 					// Clear ingress mirroring
-					err:=flow.ClearIngressMirroring(workload.Spec.InterfaceName)
-					if err!=nil{
-						glog.Errorf("Fail to clear ingress mirroring: %s",err)
+					err := flow.ClearIngressMirroring(workload.Spec.InterfaceName)
+					if err != nil {
+						glog.Errorf("Fail to clear ingress mirroring: %s", err)
 					}
 					// Clear ingress ifb class
-					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", secondIFB))
-					if err!=nil{
-						glog.Errorf("Fail to clear ingress ifb class: %s",err)
+					err = flow.Reset(cidr, fmt.Sprintf("ifb%d", secondIFB))
+					if err != nil {
+						glog.Errorf("Fail to clear ingress ifb class: %s", err)
 					}
 				}
 			}
@@ -238,14 +238,14 @@ func main() {
 					shaper.ExecTcChaos(false, egressChaosInfo)
 				} else {
 					// Clear egress mirroring
-					err:=flow.ClearEgressMirroring(workload.Spec.InterfaceName)
-					if err!=nil{
-						glog.Errorf("Fail to clear egress mirroring: %s",err)
+					err := flow.ClearEgressMirroring(workload.Spec.InterfaceName)
+					if err != nil {
+						glog.Errorf("Fail to clear egress mirroring: %s", err)
 					}
 					// Clear egress ifb class
-					err=flow.Reset(cidr, fmt.Sprintf("ifb%d", firstIFB))
-					if err!=nil{
-						glog.Errorf("Fail to clear egress ifb class: %s",err)
+					err = flow.Reset(cidr, fmt.Sprintf("ifb%d", firstIFB))
+					if err != nil {
+						glog.Errorf("Fail to clear egress ifb class: %s", err)
 					}
 				}
 

@@ -26,8 +26,8 @@ import (
 
 // Initialize two ifb modules using input id
 func InitIfbModule(firstIFB, secondIFB int) error {
-	First := fmt.Sprintf("ifb%d", firstIFB)
-	Second := fmt.Sprintf("ifb%d", secondIFB)
+	first := fmt.Sprintf("ifb%d", firstIFB)
+	second := fmt.Sprintf("ifb%d", secondIFB)
 	e := exec.New()
 
 	// Load ifb module
@@ -37,24 +37,24 @@ func InitIfbModule(firstIFB, secondIFB int) error {
 	glog.Infof("IFB mod up")
 
 	// Set two ifb devices up
-	if _, err := e.Command("ip", "link", "set", "dev", First, "up").CombinedOutput(); err != nil {
+	if _, err := e.Command("ip", "link", "set", "dev", first, "up").CombinedOutput(); err != nil {
 		return err
 	}
-	glog.Infof("%s up", First)
-	if _, err := e.Command("ip", "link", "set", "dev", Second, "up").CombinedOutput(); err != nil {
+	glog.Infof("ifb%d up", first)
+	if _, err := e.Command("ip", "link", "set", "dev", second, "up").CombinedOutput(); err != nil {
 		return err
 	}
-	glog.Infof("%s up", Second)
+	glog.Infof("%s up", second)
 
 	// Initialize two ifb interfaces' root queue discipline
-	if err := initIfb(First); err != nil {
+	if err := initIfb(first); err != nil {
 		return err
 	}
-	glog.Infof("%s inited", First)
-	if err := initIfb(Second); err != nil {
+	glog.Infof("ifb%d inited", first)
+	if err := initIfb(second); err != nil {
 		return err
 	}
-	glog.Infof("%s inited", Second)
+	glog.Infof("ifb%d inited", second)
 	return nil
 }
 
@@ -69,7 +69,7 @@ func initIfb(ifb string) error {
 	}
 
 	outs := strings.Split(string(out), " ")
-	// If already initialized, return
+	// If it's already initialized, return
 	if len(outs) >= 12 && outs[0] == "qdisc" && outs[1] == "htb" && outs[2] == "1:" && outs[3] == "root" {
 		glog.Infof("%s has already initialized", ifb)
 		return nil
@@ -92,21 +92,21 @@ func ClearIfb(firstIFB, secondIFB int) error {
 	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", firstIFB), "down").CombinedOutput(); err != nil {
 		return err
 	}
-	glog.Infof("IFB%d down", firstIFB)
+	glog.Infof("ifb%d down", firstIFB)
 	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", secondIFB), "down").CombinedOutput(); err != nil {
 		return err
 	}
-	glog.Infof("IFB%d down", secondIFB)
+	glog.Infof("ifb%d down", secondIFB)
 
 	// Clean the root queue discipline
 	_, err := e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%d", firstIFB), "root").CombinedOutput()
 	if err != nil {
-		return errors.New(fmt.Sprintf("fail to delete IFB%d's root qdisc: %s", firstIFB, err))
+		return errors.New(fmt.Sprintf("fail to delete ifb%d's root qdisc: %s", firstIFB, err))
 	}
 
 	_, err = e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%d", secondIFB), "root").CombinedOutput()
 	if err != nil {
-		return errors.New(fmt.Sprintf("fail to delete IFB%d's root qdisc: %s", secondIFB, err))
+		return errors.New(fmt.Sprintf("fail to delete ifb%d's root qdisc: %s", secondIFB, err))
 	}
 
 	return nil
