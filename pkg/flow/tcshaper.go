@@ -53,11 +53,13 @@ func (t *tcShaper) execAndLog(cmdStr string, args ...string) error {
 
 // Find available class id in ifb
 func (t *tcShaper) nextClassID(ifb string) (int, error) {
+	// Use tc command to get used class id on device
 	data, err := t.e.Command("tc", "class", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
 		return -1, err
 	}
 
+	// Scan the output
 	scanner := bufio.NewScanner(bytes.NewBuffer(data))
 	classes := sets.String{}
 	for scanner.Scan() {
@@ -71,6 +73,7 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 		if len(parts) != 14 && len(parts) != 16 {
 			return -1, fmt.Errorf("unexpected output from tc: %s (%v)", scanner.Text(), parts)
 		}
+		// Store used class id
 		classes.Insert(parts[2])
 	}
 
@@ -86,18 +89,21 @@ func (t *tcShaper) nextClassID(ifb string) (int, error) {
 
 // Find class using handle
 func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err error) {
+	// Show all tc filters on device
 	e := exec.New()
 	data, err := e.Command("tc", "filter", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
 		return "", "", false, err
 	}
 
+	// Convert cidr from dot-decimal to hexadecimal
 	hex, err := hexCIDR(cidr)
 	if err != nil {
 		return "", "", false, err
 	}
 	spec := fmt.Sprintf("match %s", hex)
 
+	// Scan the output
 	scanner := bufio.NewScanner(bytes.NewBuffer(data))
 	filter := ""
 	for scanner.Scan() {
@@ -105,10 +111,12 @@ func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err erro
 		if len(line) == 0 {
 			continue
 		}
+		// Find keyword "filter", go to the next line to get class id
 		if strings.HasPrefix(line, "filter") {
 			filter = line
 			continue
 		}
+		// Extract target class id and filter's handle id
 		if strings.Contains(line, spec) {
 			parts := strings.Split(filter, " ")
 			if len(parts) != 19 {
@@ -122,10 +130,13 @@ func findCIDRClass(cidr, ifb string) (class, handle string, found bool, err erro
 
 // Check whether the corresponding class exists
 func (t *tcShaper) classExists(classid, ifb string) (bool, error) {
+	// Get existed classes on device
 	data, err := t.e.Command("tc", "class", "show", "dev", ifb).CombinedOutput()
 	if err != nil {
 		return false, err
 	}
+
+	// Scan the output
 	scanner := bufio.NewScanner(bytes.NewBuffer(data))
 	classFound := false
 	for scanner.Scan() {
@@ -511,8 +522,9 @@ func (t *tcShaper) Rate(classid, ifb string, rate string) error {
 	return nil
 }
 
+// Add empty netem queue discipline
 func (t *tcShaper) Netem(classid, ifb string, args ...string) error {
-	// tc  qdisc  add  dev  eth0  root  netem  loss  1%  30%
+	// tc  qdisc  add  dev  eth0  root  netem
 	e := exec.New()
 
 	// For test
@@ -599,6 +611,7 @@ func (t *tcShaper) Duplicate(classid, ifb string, args ...string) error {
 	return nil
 }
 
+// Emulate corrupted packets
 func (t *tcShaper) Corrupt(classid, ifb string, args ...string) error {
 	// tc  qdisc  add  dev  eth0  root  netem  corrupt  0.2%
 	e := exec.New()

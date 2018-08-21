@@ -57,16 +57,19 @@ func main() {
 		fmt.Println(err)
 		panic(err.Error())
 	}
+
 	// Creates the clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
 
+	// Get default endpoint
 	if endpoint == "" {
 		endpoint = flow.GetMasterIP(clientset) + ":6666"
 	}
 	hostname, _ := os.Hostname()
+
 	// Init ifb module
 	err = flow.InitIfbModule(firstIFB, secondIFB)
 	if err != nil {
@@ -98,15 +101,18 @@ func main() {
 		// Check Node's clear flag, if it exists, clear all settings and close
 		_, clearNode := node.Annotations["kubernetes.io/clear-chaos"]
 		if clearNode {
+			// First close the ifb of node
 			glog.Info("Closing chaos...")
 			err := flow.ClearIfb(firstIFB, secondIFB)
 			if err != nil {
 				glog.Error(err)
 			}
 
+			// Then clean each pod
 			for _, pod := range pods.Items {
 				// Get network card name
 				workload := calico.GetWorkload(pod.Namespace, pod.Spec.NodeName, pod.Name, endpoint)
+
 				// Clear network card settings
 				err = flow.ClearIngressMirroring(workload.Spec.InterfaceName)
 				if err != nil {
@@ -116,6 +122,7 @@ func main() {
 				if err != nil {
 					glog.Errorf("Fail to clear pod %s's egress settings: %s", pod.Name, err)
 				}
+
 				// Delete Pod flag
 				pod.SetAnnotations(flow.SetPodChaosUpdated(false, false, true, true, pod.Annotations))
 				clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
@@ -136,27 +143,33 @@ func main() {
 			node.SetLabels(labels)
 			clientset.CoreV1().Nodes().UpdateStatus(node.DeepCopy())
 
+			// After label removed, k8s will delete kube-chaos from the node
 			// Wait for terminating
 			for {
 				time.Sleep(time.Duration(syncDuration) * time.Second)
 			}
 		}
 
+		// clear flag isn't exists, do chaos on all labeled pods
 		for _, pod := range pods.Items {
+			// Extract chaosInfo from pod's annotation
 			ingressChaosInfo, egressChaosInfo, ingressNeedUpdate, egressNeedUpdate, err := flow.ExtractPodChaosInfo(pod.Annotations)
 			if err != nil {
 				glog.Errorf("Failed extract pod's chaos info: %v", err)
 			}
 
+			// Store the cidr of the pod
 			cidr := fmt.Sprintf("%s/32", pod.Status.PodIP) //192.168.0.10/32
 			egressPodsCIDRs = append(egressPodsCIDRs, cidr)
 			ingressPodsCIDRs = append(ingressPodsCIDRs, cidr)
 
+			// Neither ingress nor egress need update, skip
 			if !ingressNeedUpdate && !egressNeedUpdate {
 				//glog.Infof("pod %s's setting has deployed, skip", pod.Name)
 				continue
 			}
 
+			// Get pod clear flag
 			ingressNeedClear, egressNeedClear := flow.GetClearFlag(pod.Annotations)
 
 			// Get pod's veth interface name
@@ -167,6 +180,7 @@ func main() {
 
 			if ingressNeedUpdate {
 				if !ingressNeedClear {
+					// Create ingress mirroring
 					if err := shaper.ReconcileIngressMirroring(cidr); err != nil {
 						glog.Errorf("Failed to mirror veth(%s) to ifb1: %v", workload.Spec.InterfaceName, err)
 					}
@@ -202,6 +216,7 @@ func main() {
 
 			if egressNeedUpdate {
 				if !egressNeedClear {
+					// Create egress mirroring
 					if err := shaper.ReconcileEgressMirroring(cidr); err != nil {
 						glog.Errorf("Failed to mirror veth(%s) to ifb0: %v", workload.Spec.InterfaceName, err)
 					}
@@ -241,6 +256,7 @@ func main() {
 			clientset.CoreV1().Pods(pod.Namespace).UpdateStatus(pod.DeepCopy())
 
 		}
+		// Delete chaos on pods not labeled
 		if err := flow.DeleteExtraChaos(egressPodsCIDRs, ingressPodsCIDRs, firstIFB, secondIFB); err != nil {
 			glog.Errorf("Failed to delete extra chaos: %v", err)
 		}

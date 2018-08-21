@@ -24,14 +24,19 @@ import (
 	"strings"
 )
 
+// Initialize two ifb modules using input id
 func InitIfbModule(firstIFB, secondIFB int) error {
 	First := fmt.Sprintf("ifb%d", firstIFB)
 	Second := fmt.Sprintf("ifb%d", secondIFB)
 	e := exec.New()
+
+	// Load ifb module
 	if _, err := e.Command("modprobe", "ifb").CombinedOutput(); err != nil {
 		return err
 	}
 	glog.Infof("IFB mod up")
+
+	// Set two ifb devices up
 	if _, err := e.Command("ip", "link", "set", "dev", First, "up").CombinedOutput(); err != nil {
 		return err
 	}
@@ -40,6 +45,8 @@ func InitIfbModule(firstIFB, secondIFB int) error {
 		return err
 	}
 	glog.Infof("%s up", Second)
+
+	// Initialize two ifb interfaces' root queue discipline
 	if err := initIfb(First); err != nil {
 		return err
 	}
@@ -51,6 +58,7 @@ func InitIfbModule(firstIFB, secondIFB int) error {
 	return nil
 }
 
+//Initialize ifb interface's root queue discipline
 func initIfb(ifb string) error {
 	e := exec.New()
 
@@ -76,9 +84,11 @@ func initIfb(ifb string) error {
 	return nil
 }
 
+// Set ifb devices down and clean the root queue discipline
 func ClearIfb(firstIFB, secondIFB int) error {
 	e := exec.New()
 
+	// Set ifb devices down
 	if _, err := e.Command("ip", "link", "set", "dev", fmt.Sprintf("ifb%d", firstIFB), "down").CombinedOutput(); err != nil {
 		return err
 	}
@@ -88,6 +98,7 @@ func ClearIfb(firstIFB, secondIFB int) error {
 	}
 	glog.Infof("IFB%d down", secondIFB)
 
+	// Clean the root queue discipline
 	_, err := e.Command("tc", "qdisc", "del", "dev", fmt.Sprintf("ifb%d", firstIFB), "root").CombinedOutput()
 	if err != nil {
 		return errors.New(fmt.Sprintf("fail to delete IFB%d's root qdisc: %s", firstIFB, err))
