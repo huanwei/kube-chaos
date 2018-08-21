@@ -88,6 +88,7 @@ func GetMasterIP(clientset *kubernetes.Clientset) (masterIP string) {
 	}
 	return masterIP
 }
+
 func sliceToSets(slice []string) sets.String {
 	ss := sets.String{}
 	for _, s := range slice {
